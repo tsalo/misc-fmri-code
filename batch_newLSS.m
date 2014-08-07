@@ -1,7 +1,7 @@
 % batch_newLSS
 % General settings
 tStart = tic;
-subjects = {'epc141'};
+subjects = {'epc142'};
 
 spmDir = '/nfs/ep2/AX/first_levels/00_MONTH/';
 spmSubDir = '/MTU/func_an_SPM8/';

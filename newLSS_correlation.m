@@ -208,7 +208,7 @@ end
 %% Extract Coordinates of ROI
 function [index mat] = roi_find_index(ROI_loc, thresh)
 % FORMAT [index mat] = roi_find_index(ROI_loc, thresh)
-% Returns the XYZ address of voxels with values greater then threshold. 
+% Returns the XYZ address of voxels with values greater than threshold. 
 % By Dennis Thompson.
 % 
 %

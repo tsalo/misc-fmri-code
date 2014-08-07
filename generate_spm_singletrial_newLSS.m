@@ -137,56 +137,47 @@ if modeltype == 2
                     allConds{kCond} = SPM.Sess(iSess).U(kCond).name{1};
                 end
                 allOtherConds(jCond) = [];
-
-                for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
-                    % individual trial
-                    onsets = {};
-                    durations = {};
-                    names = {};
-                    onsets = [onsets SPM.Sess(iSess).U(jCond).ons(kTrial)];
-                    durations = [durations SPM.Sess(iSess).U(jCond).dur(kTrial)];
-                    cur_name = [SPM.Sess(iSess).U(jCond).name{1} '_' sprintf('%03d', kTrial)];
-                    names = [names cur_name];
-
-                    % all other trials
-                    same_trialtype_onsets = [];
-                    same_trialtype_durations = [];
-                    same_trialtype_names = {['OTHER_' SPM.Sess(iSess).U(jCond).name{1}]};
-                    other_trialtype_onsets = cell(1, length(allOtherConds));
-                    other_trialtype_durations = cell(1, length(allOtherConds));
-                    other_trialtype_names = allOtherConds;
-                    for jjCond = 1:length(SPM.Sess(iSess).U)
-                        for kkTrial = 1:length(SPM.Sess(iSess).U(jjCond).ons)
-                            if jCond == jjCond && kTrial ~= kkTrial
-                                same_trialtype_onsets = [same_trialtype_onsets SPM.Sess(iSess).U(jjCond).ons(kkTrial)];
-                                same_trialtype_durations = [same_trialtype_durations SPM.Sess(iSess).U(jjCond).dur(kkTrial)];
-                            elseif jCond ~= jjCond
-                                for jjjCond = 1:length(allOtherConds)
-                                    if strcmp(SPM.Sess(iSess).U(jjCond).name{1}, allOtherConds{jjjCond})
-                                        other_trialtype_onsets{jjjCond} = [other_trialtype_onsets{jjjCond}...
-                                            SPM.Sess(iSess).U(jjCond).ons(kkTrial)];
-                                        other_trialtype_durations{jjjCond} = [other_trialtype_durations{jjjCond}...
-                                            SPM.Sess(iSess).U(jjCond).dur(kkTrial)];
-                                    end
-                                end
+                otherDiffCondNames = allOtherConds;
+                
+                for jjCond = 1:length(SPM.Sess(iSess).U)
+                    if jCond ~= jjCond
+                        for jjjCond = 1:length(allOtherConds)
+                            if strcmp(SPM.Sess(iSess).U(jjCond).name{1}, allOtherConds{jjjCond})
+                                otherDiffCondOnsets{jjjCond} = SPM.Sess(iSess).U(jjCond).ons;
+                                otherDiffCondDurations{jjjCond} = SPM.Sess(iSess).U(jjCond).dur;
                             end
                         end
                     end
+                end
+                
+                for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
+                    % Set onsets and durations. setdiff will reorder alphabetically/numerically,
+                    % but that should not matter.
+                    onsets = {};
+                    durations = {};
+                    names = {};
                     
-                    % group into single set of regs files
-                    onsets = [onsets same_trialtype_onsets other_trialtype_onsets];
-                    durations = [durations same_trialtype_durations other_trialtype_durations];
-                    names = [names same_trialtype_names other_trialtype_names];
+                    singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' sprintf('%03d', kTrial)];
+                    otherSameCondName = ['OTHER_' SPM.Sess(iSess).U(jCond).name{1}];
+
+                    singleOnset = SPM.Sess(iSess).U(jCond).ons(kTrial);
+                    singleDuration = SPM.Sess(iSess).U(jCond).dur(kTrial);
+                    [otherSameCondOnsets, index] = setdiff(SPM.Sess(iSess).U(jCond).ons, SPM.Sess(iSess).U(jCond).ons(kTrial));
+                    otherSameCondDurations = SPM.Sess(iSess).U(jCond).dur(index);
+                    
+                    onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
+                    durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
+                    names = [names singleName otherSameCondName otherDiffCondNames];
                     
                     % make trial directory
-                    trialdir = [outputdir 'Sess' sprintf('%03d', iSess) '/' cur_name '/'];
+                    trialdir = [outputdir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
                     if ~exist(trialdir,'dir')
                         mkdir(trialdir)
                     end
 
                     % add trial information
                     curinfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial...
-                        length(SPM.Sess(iSess).U(jCond).ons(kTrial)) cur_name trialdir ['Sess' sprintf('%03d', iSess) '_' cur_name '.img']};
+                        length(SPM.Sess(iSess).U(jCond).ons(kTrial)) singleName trialdir ['Sess' sprintf('%03d', iSess) '_' singleName '.img']};
                     trialinfo = [trialinfo; curinfo];
                     
 
@@ -224,8 +215,8 @@ if modeltype == 2
                         clear matlabbatch
 
                         % copy first beta image to beta directory
-                        copyfile([trialdir 'beta_0001.img'],[betadir 'Sess' sprintf('%03d', iSess) '_' cur_name '.img']);
-                        copyfile([trialdir 'beta_0001.hdr'],[betadir 'Sess' sprintf('%03d', iSess) '_' cur_name '.hdr']);
+                        copyfile([trialdir 'beta_0001.img'],[betadir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
+                        copyfile([trialdir 'beta_0001.hdr'],[betadir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
                         
                         % discard extra files, if desired
                         if discard_mm_files == 1
@@ -289,9 +280,9 @@ elseif modeltype == 1
             if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, lump_conditions)
                 onsets = [onsets SPM.Sess(iSess).U(jCond).ons'];
                 durations = [durations SPM.Sess(iSess).U(jCond).dur'];
-                cur_name = [SPM.Sess(iSess).U(jCond).name{1}];
-                names = [names cur_name];
-                curinfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} [1] length(SPM.Sess(iSess).U(jCond).ons) SPM.Sess(iSess).U(jCond).ons(1) cur_name};
+                singleName = [SPM.Sess(iSess).U(jCond).name{1}];
+                names = [names singleName];
+                curinfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} [1] length(SPM.Sess(iSess).U(jCond).ons) SPM.Sess(iSess).U(jCond).ons(1) singleName};
                 trialinfo = [trialinfo; curinfo];
                 counter = counter + 1;
             % otherwise set up a regressor for each individual trial
@@ -299,9 +290,9 @@ elseif modeltype == 1
                 for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
                     onsets = [onsets SPM.Sess(iSess).U(jCond).ons(kTrial)];
                     durations = [durations SPM.Sess(iSess).U(jCond).dur(kTrial)];
-                    cur_name = [SPM.Sess(iSess).U(jCond).name{1} '_' num2str(kTrial)];
-                    names = [names cur_name];
-                    curinfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial length(SPM.Sess(iSess).U(jCond).ons(kTrial)) SPM.Sess(iSess).U(jCond).ons(kTrial) cur_name};
+                    singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' num2str(kTrial)];
+                    names = [names singleName];
+                    curinfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial length(SPM.Sess(iSess).U(jCond).ons(kTrial)) SPM.Sess(iSess).U(jCond).ons(kTrial) singleName};
                     trialinfo = [trialinfo; curinfo];
                     counter = counter + 1;
                 end
