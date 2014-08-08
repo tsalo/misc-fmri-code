@@ -48,10 +48,20 @@ for iCon = 1:length(SPM.xCon)
         
         save_nii_spm(dHeader, Dvals);
         
-        outStruct{conCounter}.header{1} = [conName '_size'];
-        outStruct{conCounter+1}.header{1} = [conName '_D'];
+        outStruct{conCounter}.header{1} = [conName '_X'];
+        outStruct{conCounter+1}.header{1} = [conName '_Y'];
+        outStruct{conCounter+2}.header{1} = [conName '_Z'];
+        outStruct{conCounter+3}.header{1} = [conName '_size'];
+        outStruct{conCounter+4}.header{1} = [conName '_peakT'];
+        outStruct{conCounter+5}.header{1} = [conName '_peakD'];
+        outStruct{conCounter+6}.header{1} = [conName '_meanD'];
         outStruct{conCounter}.col{1} = '';
         outStruct{conCounter+1}.col{1} = '';
+        outStruct{conCounter+2}.col{1} = '';
+        outStruct{conCounter+3}.col{1} = '';
+        outStruct{conCounter+4}.col{1} = '';
+        outStruct{conCounter+5}.col{1} = '';
+        outStruct{conCounter+6}.col{1} = '';
         
         % Create masks of all clusters and determine mean Cohen's D of each cluster.
         switch corr
@@ -74,7 +84,7 @@ for iCon = 1:length(SPM.xCon)
         for jClust = 1:length(clustSize)
             oneClustMat = zeros(size(allClustMat));
             oneClustMat(allClustMat == clustNum(jClust)) = 1;
-            outHeader.fname = [outDir 'Cluster_' num2str(jClust) '.nii'];
+            outHeader.fname = [outDir 'Cluster_' sprintf('%03d', jClust) '.nii'];
             spm_write_vol(outHeader, oneClustMat);
             
             [XYZ ROImat] = roi_find_index(outHeader.fname, 0);
@@ -82,8 +92,15 @@ for iCon = 1:length(SPM.xCon)
             roi = spm_get_data(dHeader.fname, betaXYZ{1});
             roi(isnan(roi)) = 0;
             
-            outStruct{conCounter}.col{jClust, 1} = clustSize(jClust);
-            outStruct{conCounter+1}.col{jClust, 1} = sum(roi(:)) / length(find(roi));
+            [peakCoord, peakValue, peakMM] = get_peak_d(dHeader.fname, outHeader.fname);
+            
+            outStruct{conCounter}.col{jClust, 1} = peakCoord(1);
+            outStruct{conCounter+1}.col{jClust, 1} = peakCoord(2);
+            outStruct{conCounter+2}.col{jClust, 1} = peakCoord(3);
+            outStruct{conCounter+3}.col{jClust, 1} = clustSize(jClust);
+            outStruct{conCounter+4}.col{jClust, 1} = Tvals(peakMM(1), peakMM(2), peakMM(3));
+            outStruct{conCounter+5}.col{jClust, 1} = peakValue;
+            outStruct{conCounter+6}.col{jClust, 1} = sum(roi(:)) / length(find(roi));
         end
         
         if length(clustSize) > maxClusters
@@ -91,7 +108,7 @@ for iCon = 1:length(SPM.xCon)
         end
         
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustSize), nClusters, k);
-        conCounter = conCounter + 2;
+        conCounter = conCounter + 7;
     else
         fprintf(['\tSkipping contrast ' num2str(iCon) ', ' SPM.xCon(iCon).name ', because it is an F con.\n']);
     end
@@ -105,4 +122,40 @@ end
 
 write_struct(outStruct, [outMainDir '/clusters.csv']);
 fprintf('Done.\n\n');
+end
+
+%%
+function [peakCoord, peakValue, peakMM] = get_peak_d(niiFile, roiFile)
+%UNTITLED8 Summary of this function goes here
+%   Detailed explanation goes here
+
+V = spm_vol(niiFile);
+
+% Get ROI index and transform matrix.
+if exist(roiFile, 'file')
+    [XYZ ROImat] = roi_find_index(roiFile);
+else
+    error('Mask not found: %s\n', roiFile);
+end
+
+% Generate XYZ locations for each beta image correcting for alignment
+% issues and preallocate mean_roi vector.
+betaXYZ = adjust_XYZ(XYZ, ROImat, V);
+
+% Extract mean of ROI from each beta.
+betasInROI = spm_get_data(V(1), betaXYZ{1});
+[peakValue, idx] = max(betasInROI);
+maxLoc = betaXYZ{1}(:, idx);
+maxLocReal = [26 -60 -24];
+
+peakCoord = mm2vox(maxLoc, niiFile);
+peakMM = maxLoc.';
+end
+
+%%
+function vox = mm2vox(maxLoc, niiFile)
+v2m = spm_get_space(niiFile);
+m2v = inv(v2m);
+
+vox(1:3) = maxLoc' * v2m(1:3, 1:3) + v2m(1:3, 4)';
 end
