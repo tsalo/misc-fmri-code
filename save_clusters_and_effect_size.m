@@ -73,26 +73,25 @@ for iCon = 1:length(SPM.xCon)
             oneClustMat(allClustMat == clustNum(jClust)) = 1;
             clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', jClust) '.nii'];
             spm_write_vol(clustHeader, oneClustMat);
-
             [XYZ ROImat] = roi_find_index(clustHeader.fname, 0);
             betaXYZ = adjust_XYZ(XYZ, ROImat, dHeader);
             roi = spm_get_data(dHeader.fname, betaXYZ{1});
             roi(isnan(roi)) = 0;
 
-            [peakValue, peakCoord, peakMM] = get_peak_d(dHeader, betaXYZ);
+            [peakValue, peakCoord, peakMM] = get_peak_d(VspmT.fname, betaXYZ);
 
             % Fill in output csv.
             outStruct{1}.col{jClust, 1} = peakCoord(1);
             outStruct{2}.col{jClust, 1} = peakCoord(2);
             outStruct{3}.col{jClust, 1} = peakCoord(3);
             outStruct{4}.col{jClust, 1} = clustSize(jClust);
-            outStruct{5}.col{jClust, 1} = Tvals(peakMM(1), peakMM(2), peakMM(3));
-            outStruct{6}.col{jClust, 1} = peakValue;
+            outStruct{5}.col{jClust, 1} = peakValue;
+            outStruct{6}.col{jClust, 1} = Dvals(peakMM(1), peakMM(2), peakMM(3));
             outStruct{7}.col{jClust, 1} = sum(roi(:)) / length(find(roi));
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustSize), nClusters, k);
-        write_struct(outStruct, [outDir 'clusters_' sprintf('%03d', length(clustSize)) '.csv']);鈽㎙⟀騷
+        write_struct(outStruct, [outDir 'clusters_' sprintf('%03d', length(clustSize)) '.csv']);
     else
         fprintf(['\tSkipping contrast ' num2str(iCon) ', ' SPM.xCon(iCon).name ', because it is an F con.\n']);
     end
@@ -102,15 +101,17 @@ fprintf('Done.\n\n');
 end
 
 %%
-function [peakValue, peakCoord, peakMM] = get_peak_d(dHeader, betaXYZ)
-% FORMAT [peakValue, peakCoord, peakMM] = get_peak_d(dHeader, betaXYZ)
+function [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
+% FORMAT [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
 % Extracts coordinates, value, and location in mm of peak value in roi from
 % nifti image.
 % Extract values from ROI and get max and location in XYZ and coordinates.
-valuesInROI = spm_get_data(dHeader(1), betaXYZ{1});
+V = spm_vol(niiFile);
+
+valuesInROI = spm_get_data(V(1), betaXYZ{1});
 [peakValue, idx] = max(valuesInROI);
 maxLoc = betaXYZ{1}(:, idx)';
-peakCoord(1:3) = maxLoc * dHeader.mat(1:3, 1:3) + dHeader.mat(1:3, 4)'
+peakCoord(1:3) = maxLoc * V.mat(1:3, 1:3) + V.mat(1:3, 4)';
 peakMM = maxLoc;
 end
 
