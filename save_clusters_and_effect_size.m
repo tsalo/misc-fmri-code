@@ -36,6 +36,8 @@ for iCon = 1:length(SPM.xCon)
         % Create Cohen's D image.
         [VspmT, Tvals] = load_nii_spm(spmT);
         df = [SPM.xCon(iCon).eidf SPM.xX.erdf];
+        [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
+        voxelScalar = sizeX * sizeY * sizeZ;
         D_name = 'D_';
         Dvals = (2 .* Tvals) ./ sqrt(df(2));
         dHeader = VspmT;
@@ -44,11 +46,11 @@ for iCon = 1:length(SPM.xCon)
 
         % Set up output csv.
         outStruct{1}.header{1} = 'x'; outStruct{2}.header{1} = 'y'; outStruct{3}.header{1} = 'z';
-        outStruct{4}.header{1} = 'k'; outStruct{5}.header{1} = 'peak_T'; outStruct{6}.header{1} = 'peak_D';
-        outStruct{7}.header{1} = 'mean_D';
+        outStruct{4}.header{1} = 'k'; outStruct{5}.header{1} = 'mm3'; outStruct{6}.header{1} = 'peak_T';
+        outStruct{7}.header{1} = 'peak_D'; outStruct{8}.header{1} = 'mean_D';
         outStruct{1}.col{1} = ''; outStruct{2}.col{1} = ''; outStruct{3}.col{1} = '';
         outStruct{4}.col{1} = ''; outStruct{5}.col{1} = ''; outStruct{6}.col{1} = '';
-        outStruct{7}.col{1} = '';
+        outStruct{7}.col{1} = ''; outStruct{8}.col{1} = '';
 
         % Create masks of all clusters and determine mean Cohen's D of each cluster.
         switch corr
@@ -73,10 +75,11 @@ for iCon = 1:length(SPM.xCon)
             oneClustMat(allClustMat == clustNum(jClust)) = 1;
             clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', jClust) '.nii'];
             spm_write_vol(clustHeader, oneClustMat);
-            [XYZ ROImat] = roi_find_index(clustHeader.fname, 0);
+            [XYZ, ROImat] = roi_find_index(clustHeader.fname, 0);
             betaXYZ = adjust_XYZ(XYZ, ROImat, dHeader);
             roi = spm_get_data(dHeader.fname, betaXYZ{1});
             roi(isnan(roi)) = 0;
+            
 
             [peakValue, peakCoord, peakMM] = get_peak_d(VspmT.fname, betaXYZ);
 
@@ -85,9 +88,10 @@ for iCon = 1:length(SPM.xCon)
             outStruct{2}.col{jClust, 1} = peakCoord(2);
             outStruct{3}.col{jClust, 1} = peakCoord(3);
             outStruct{4}.col{jClust, 1} = clustSize(jClust);
-            outStruct{5}.col{jClust, 1} = peakValue;
-            outStruct{6}.col{jClust, 1} = Dvals(peakMM(1), peakMM(2), peakMM(3));
-            outStruct{7}.col{jClust, 1} = sum(roi(:)) / length(find(roi));
+            outStruct{5}.col{jClust, 1} = clustSize(jClust) * voxelScalar;
+            outStruct{6}.col{jClust, 1} = peakValue;
+            outStruct{7}.col{jClust, 1} = Dvals(peakMM(1), peakMM(2), peakMM(3));
+            outStruct{8}.col{jClust, 1} = sum(roi(:)) / length(find(roi));
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustSize), nClusters, k);
@@ -100,6 +104,20 @@ end
 fprintf('Done.\n\n');
 end
 
+function [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
+% FORMAT [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
+% Determines size of voxel in X, Y, and Z dimensions. This assumes that the
+% matrix is not diagonal, but works fine if it is.
+V = spm_vol(niiFile);
+mniO = (V.mat * [1 1 1 1]')';
+mniX = (V.mat * [2 1 1 1]')';
+mniY = (V.mat * [1 2 1 1]')';
+mniZ = (V.mat * [1 1 2 1]')';
+sizeX = pdist([mniO; mniX], 'euclidean');
+sizeY = pdist([mniO; mniY], 'euclidean');
+sizeZ = pdist([mniO; mniZ], 'euclidean');
+end
+
 %%
 function [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
 % FORMAT [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
@@ -107,7 +125,6 @@ function [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
 % nifti image.
 % Extract values from ROI and get max and location in XYZ and coordinates.
 V = spm_vol(niiFile);
-
 valuesInROI = spm_get_data(V(1), betaXYZ{1});
 [peakValue, idx] = max(valuesInROI);
 maxLoc = betaXYZ{1}(:, idx)';
@@ -124,7 +141,6 @@ function [index, mat] = roi_find_index(ROI_loc, thresh)
 %
 % ROI_loc:          String pointing to nifti image.
 % thresh:           Threshold value, defaults to zero. Double.
-
 if ~exist('thresh','var'),
     thresh = 0;
 end
@@ -154,7 +170,6 @@ function funcXYZ = adjust_XYZ(XYZ, ROImat, V)
 % XYZ:              Output from lss_roi_find_index.
 % ROImat:           Output from lss_roi_find_index.
 % V:                Header information of nifti file from spm_vol.
-
 XYZ(4, :) = 1;
 funcXYZ = cell(length(V));
 for n = 1:length(V),
