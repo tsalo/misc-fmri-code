@@ -34,16 +34,18 @@ for iCon = 1:length(SPM.xCon)
         end
 
         % Create Cohen's D image.
-        [VspmT, Tvals] = load_nii_spm(spmT);
+        VspmT = spm_vol(spmT);
+        [Tvals, ~] = spm_read_vols(VspmT);
         df = [SPM.xCon(iCon).eidf SPM.xX.erdf];
-        [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
-        voxelScalar = sizeX * sizeY * sizeZ;
-        D_name = 'D_';
         Dvals = (2 .* Tvals) ./ sqrt(df(2));
         dHeader = VspmT;
-        dHeader.fname = [outDir D_name conName '.nii'];
+        dHeader.fname = [outDir 'D_' conName '.nii'];
         save_nii_spm(dHeader, Dvals);
-
+        
+        % Determine voxel size of T image.
+        [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
+        voxelScalar = sizeX * sizeY * sizeZ;
+        
         % Set up output csv.
         outStruct{1}.header{1} = 'x'; outStruct{2}.header{1} = 'y'; outStruct{3}.header{1} = 'z';
         outStruct{4}.header{1} = 'k'; outStruct{5}.header{1} = 'mm3'; outStruct{6}.header{1} = 'peak_T';
@@ -52,7 +54,8 @@ for iCon = 1:length(SPM.xCon)
         outStruct{4}.col{1} = ''; outStruct{5}.col{1} = ''; outStruct{6}.col{1} = '';
         outStruct{7}.col{1} = ''; outStruct{8}.col{1} = '';
 
-        % Create masks of all clusters and determine mean Cohen's D of each cluster.
+        % Create masks of all significant clusters and determine mean
+        % Cohen's D of each cluster.
         switch corr
             case 'unc'
                 tThr = spm_u(pThr, df, STAT);
@@ -95,7 +98,7 @@ for iCon = 1:length(SPM.xCon)
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustSize), nClusters, k);
-        write_struct(outStruct, [outDir 'clusters_' sprintf('%03d', length(clustSize)) '.csv']);
+        write_csv(outStruct, [outDir 'clusters_' sprintf('%03d', length(clustSize)) '.csv']);
     else
         fprintf(['\tSkipping contrast ' num2str(iCon) ', ' SPM.xCon(iCon).name ', because it is an F con.\n']);
     end
