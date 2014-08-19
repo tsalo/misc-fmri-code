@@ -12,8 +12,38 @@ function save_clusters_and_effect_size(spmFile, pThr, corr, k)
 % corr:    Correction applied to p threshold (FWE, FDR, or unc). String.
 % k:       Minimum acceptable cluster size. Double.
 
-[path, ~] = fileparts(spmFile);
-load(spmFile);
+if exist(spmFile, 'file')
+    [path, ~] = fileparts(spmFile);
+    load(spmFile);
+else
+    error('spmFile does not exist. Quitting.');
+end
+
+if ischar(pThr)
+    fprintf('Warning, your set p threshold is a string. Trying to convert to double.\n')
+    pThr = str2double(pThr);
+    if isnan(pThr)
+        fprintf('P threshold could not be converted to double, setting to default 0.001.\n');
+        pThr = 0.001;
+    end
+elseif isa(pThr, 'double')
+else
+    fprintf('Warning, your set p threshold is not a double or a string. Setting to default 0.001.\n');
+    pThr = 0.001;
+end
+
+if ischar(k)
+    fprintf('Warning, your set k is a string. Trying to convert to double.\n')
+    k = str2double(k);
+    if isnan(k)
+        fprintf('P threshold could not be converted to double, setting to default 5.\n');
+        k = 5;
+    end
+elseif isa(k, 'double')
+else
+    fprintf('Warning, your set k is not a double or a string. Setting to default 5.\n');
+    k = 5;
+end
 
 design = SPM.xsDes.Design;
 fprintf(['Evaluating second-level results of design: ' design '.\n']);
@@ -40,7 +70,8 @@ for iCon = 1:length(SPM.xCon)
         Dvals = (2 .* Tvals) ./ sqrt(df(2));
         dHeader = VspmT;
         dHeader.fname = [outDir 'D_' conName '.nii'];
-        save_nii(dHeader, Dvals);
+        outDHeader = spm_create_vol(dHeader);
+        spm_write_vol(outDHeader, Dvals(:, :, :));
 
         % Determine voxel size of T image.
         [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
@@ -63,6 +94,8 @@ for iCon = 1:length(SPM.xCon)
                 tThr  = spm_uc(pThr, df, STAT, SPM.xVol.R, 1, SPM.xVol.S);
             case 'FDR'
                 tThr  = spm_uc_FDR(pThr, df, STAT, 1, VspmT, 0);
+            otherwise
+                error('Variable corr must be either "unc", "FWE", or "FDR".');
         end
 
         clustHeader = VspmT;
@@ -85,7 +118,7 @@ for iCon = 1:length(SPM.xCon)
             
 
             [peakValue, peakCoord, peakMM] = get_peak_d(VspmT.fname, betaXYZ);
-
+            keyboard
             % Fill in output csv.
             outStruct{1}.col{jClust, 1} = peakCoord(1);
             outStruct{2}.col{jClust, 1} = peakCoord(2);
@@ -107,6 +140,7 @@ end
 fprintf('Done.\n\n');
 end
 
+%% Determine Voxel Size in Nifti File
 function [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
 % FORMAT [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
 % Determines size of voxel in X, Y, and Z dimensions. This assumes that the
@@ -121,7 +155,7 @@ sizeY = pdist([mniO; mniY], 'euclidean');
 sizeZ = pdist([mniO; mniZ], 'euclidean');
 end
 
-%%
+%% Extract Value, MNI Coordinates, and Voxel Coordinates of Peak Value in ROI.
 function [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
 % FORMAT [peakValue, peakCoord, peakMM] = get_peak_d(niiFile, betaXYZ)
 % Extracts coordinates, value, and location in mm of peak value in roi from
@@ -132,7 +166,7 @@ valuesInROI = spm_get_data(V(1), betaXYZ{1});
 [peakValue, idx] = max(valuesInROI);
 maxLoc = betaXYZ{1}(:, idx)';
 peakCoord(1:3) = maxLoc * V.mat(1:3, 1:3) + V.mat(1:3, 4)';
-peakMM = maxLoc;
+peakMM = uint8(maxLoc);
 end
 
 %% Extract Coordinates of ROI
@@ -182,21 +216,5 @@ for n = 1:length(V),
         tmp = inv(V(n).mat) * (ROImat * XYZ);
     end
     funcXYZ{n} = tmp(1:3, :);
-end
-end
-
-%% Save Nifti Files
-function V3 = save_nii(V, Y)
-% FORMAT V3 = save_nii(V, Y);
-% Saves nifti images using SPM functions. Works in tandem with load_nii_spm. 
-% Calls spm_create_vol and spm_write_vol. 
-%
-%
-% V:               Header information of nifti image. #Volumes x 1 Structure.
-% Y:               Data from nifti image. Double matrix (3D or 4D).
-% V3:              Data structure after modification for writing.
-V2 = spm_create_vol(V);
-for n = 1:length(V2);
-    V3(n) = spm_write_vol(V2(n),Y(:,:,:,n));
 end
 end
