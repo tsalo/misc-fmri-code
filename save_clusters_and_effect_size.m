@@ -40,12 +40,12 @@ for iCon = 1:length(SPM.xCon)
         Dvals = (2 .* Tvals) ./ sqrt(df(2));
         dHeader = VspmT;
         dHeader.fname = [outDir 'D_' conName '.nii'];
-        save_nii_spm(dHeader, Dvals);
-        
+        save_nii(dHeader, Dvals);
+
         % Determine voxel size of T image.
         [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
         voxelScalar = sizeX * sizeY * sizeZ;
-        
+
         % Set up output csv.
         outStruct{1}.header{1} = 'x'; outStruct{2}.header{1} = 'y'; outStruct{3}.header{1} = 'z';
         outStruct{4}.header{1} = 'k'; outStruct{5}.header{1} = 'mm3'; outStruct{6}.header{1} = 'peak_T';
@@ -182,5 +182,21 @@ for n = 1:length(V),
         tmp = inv(V(n).mat) * (ROImat * XYZ);
     end
     funcXYZ{n} = tmp(1:3, :);
+end
+end
+
+%% Save Nifti Files
+function V3 = save_nii(V, Y)
+% FORMAT V3 = save_nii(V, Y);
+% Saves nifti images using SPM functions. Works in tandem with load_nii_spm. 
+% Calls spm_create_vol and spm_write_vol. 
+%
+%
+% V:               Header information of nifti image. #Volumes x 1 Structure.
+% Y:               Data from nifti image. Double matrix (3D or 4D).
+% V3:              Data structure after modification for writing.
+V2 = spm_create_vol(V);
+for n = 1:length(V2);
+    V3(n) = spm_write_vol(V2(n),Y(:,:,:,n));
 end
 end
