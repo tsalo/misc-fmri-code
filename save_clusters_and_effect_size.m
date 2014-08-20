@@ -26,8 +26,7 @@ if ischar(pThr)
         fprintf('P threshold could not be converted to double, setting to default 0.001.\n');
         pThr = 0.001;
     end
-elseif isa(pThr, 'double')
-else
+elseif ~isa(pThr, 'double')
     fprintf('Warning, your set p threshold is not a double or a string. Setting to default 0.001.\n');
     pThr = 0.001;
 end
@@ -39,8 +38,7 @@ if ischar(k)
         fprintf('P threshold could not be converted to double, setting to default 5.\n');
         k = 5;
     end
-elseif isa(k, 'double')
-else
+elseif ~isa(k, 'double')
     fprintf('Warning, your set k is not a double or a string. Setting to default 5.\n');
     k = 5;
 end
@@ -54,8 +52,7 @@ for iCon = 1:length(SPM.xCon)
 
     if strcmp(STAT, 'T')
         spmT = [path '/' SPM.xCon(iCon).Vspm.fname];
-        conName = SPM.xCon(iCon).name;
-        conName = strrep(conName, ' ', '_');
+        conName = ['Contrast_' sprintf('%03d', iCon) '-' strrep(SPM.xCon(iCon).name, ' ', '_')];
         fprintf(['\tEvaluating contrast ' num2str(iCon) ', ' conName '\n']);
         outDir = [path '/' num2str(pThr) '_' corr '_clusters/' conName '/'];
 
@@ -109,16 +106,15 @@ for iCon = 1:length(SPM.xCon)
         for jClust = 1:length(clustSize)
             oneClustMat = zeros(size(allClustMat));
             oneClustMat(allClustMat == clustNum(jClust)) = 1;
-            clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', jClust) '.nii'];
-            spm_write_vol(clustHeader, oneClustMat);
-            [XYZ, ROImat] = roi_find_index(clustHeader.fname, 0);
-            betaXYZ = adjust_XYZ(XYZ, ROImat, dHeader);
+            [x, y, z] = ind2sub(size(oneClustMat), find(oneClustMat == 1));
+            XYZ = [x'; y'; z'];
+            betaXYZ = adjust_XYZ(XYZ, clustHeader.mat, dHeader);
             roi = spm_get_data(dHeader.fname, betaXYZ{1});
             roi(isnan(roi)) = 0;
-            
-
             [peakValue, peakCoord, peakMM] = get_peak_d(VspmT.fname, betaXYZ);
-            keyboard
+            clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', jClust) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
+            spm_write_vol(clustHeader, oneClustMat);
+
             % Fill in output csv.
             outStruct{1}.col{jClust, 1} = peakCoord(1);
             outStruct{2}.col{jClust, 1} = peakCoord(2);
@@ -131,7 +127,7 @@ for iCon = 1:length(SPM.xCon)
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustSize), nClusters, k);
-        write_csv(outStruct, [outDir 'clusters_' sprintf('%03d', length(clustSize)) '.csv']);
+        write_csv(outStruct, [outDir 'ClusterReport_' sprintf('%03d', length(clustSize)) '.csv']);
     else
         fprintf(['\tSkipping contrast ' num2str(iCon) ', ' SPM.xCon(iCon).name ', because it is an F con.\n']);
     end
