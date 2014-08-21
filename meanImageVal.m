@@ -1,19 +1,22 @@
-function meanResMS = meanResMS(spmFolder)
-% FORMAT meanResMS = meanResMS(spmFolder)
+function meanVal = meanImageVal(valuesFile, maskFile)
+% FORMAT meanVal = meanImageVal(valuesFile, maskFile)
 % Gives you the mean across a ResMS file.
 
-resMSFile = [spmFolder '/ResMS.hdr']; % or something
-maskFile = [spmFolder '/mask.hdr']; % whatever
+Vvals = spm_vol(valuesFile);
 
-Vmask = spm_vol(maskFile);
-Vres = spm_vol(resMSFile);
-
-[XYZ ROImat] = roi_find_index(maskFile, 0);
-betaXYZ = adjust_XYZ(XYZ, ROImat, Vres);
-resMSVals = spm_get_data(resMSFile, betaXYZ{1});
-resMSVals(isnan(resMSVals)) = 0;
-
-meanResMS = mean(resMSVals);
+if exist('maskFile', 'var')
+    Vmask = spm_vol(maskFile);
+    [maskRawXYZ maskMat] = roi_find_index(maskFile, 0);
+    maskXYZ = adjust_XYZ(maskRawXYZ, maskMat, Vvals);
+    imageVals = spm_get_data(valuesFile, maskXYZ{1});
+    imageVals(isnan(imageVals)) = 0;
+    meanVal = mean(imageVals);
+else
+    disp('Warning. No mask given. Extracting mean from whole volume.')
+    imageVals = spm_read_vols(Vvals);
+    imageVals(isnan(imageVals)) = 0;
+    meanVal = mean(imageVals(:));
+end
 end
 
 %% Extract Coordinates of ROI
