@@ -75,6 +75,7 @@ for iCon = 1:length(SPM.xCon)
         voxelScalar = sizeX * sizeY * sizeZ;
 
         % Set up output csv.
+        clear outStruct
         outStruct{1}.header{1} = 'x'; outStruct{2}.header{1} = 'y'; outStruct{3}.header{1} = 'z';
         outStruct{4}.header{1} = 'k'; outStruct{5}.header{1} = 'mm3'; outStruct{6}.header{1} = 'peak_T';
         outStruct{7}.header{1} = 'peak_D'; outStruct{8}.header{1} = 'mean_D';
@@ -163,35 +164,6 @@ valuesInROI = spm_get_data(V(1), betaXYZ{1});
 maxLoc = betaXYZ{1}(:, idx)';
 peakCoord(1:3) = maxLoc * V.mat(1:3, 1:3) + V.mat(1:3, 4)';
 peakMM = uint8(maxLoc);
-end
-
-%% Extract Coordinates of ROI
-function [index, mat] = roi_find_index(ROI_loc, thresh)
-% FORMAT [index, mat] = roi_find_index(ROI_loc, thresh)
-% Returns the XYZ address of voxels with values greater than threshold. 
-% By Dennis Thompson.
-% 
-%
-% ROI_loc:          String pointing to nifti image.
-% thresh:           Threshold value, defaults to zero. Double.
-if ~exist('thresh','var'),
-    thresh = 0;
-end
-
-data = nifti(ROI_loc);
-Y = double(data.dat);
-Y(isnan(Y)) = 0;
-index = [];
-for n = 1:size(Y, 3)
-    % find values greater > thresh
-    [xx, yy] = find(squeeze(Y(:, :, n)) > thresh);
-    if ~isempty(xx),
-        zz = ones(size(xx)) * n;
-        index = [index, [xx'; yy'; zz']];
-    end
-end
-
-mat = data.mat;
 end
 
 %% Adjust Coordinates of ROI
