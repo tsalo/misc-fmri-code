@@ -1,5 +1,5 @@
 function newLSS_correlation(images, spmFile, rois, settings)
-% FORMAT newLSS_correlation(images, spmFile, rois, fconnType, overwrite)
+% FORMAT newLSS_correlation(images, spmFile, rois, settings)
 % Takes cell array of 4D images and, for each image, extracts mean beta
 % series from mask and calculates voxel-wise correlation with that beta
 % series. It then converts that R image to a Z image before taking the mean
@@ -18,13 +18,13 @@ function newLSS_correlation(images, spmFile, rois, settings)
 %                   in the brain, while in roi2roi connectivity each roi's
 %                   beta series will be correlated with every other roi's
 %                   beta series. The latter is not set up yet.
-% fconnType:        Which form of functional connectivity will be
+% fConnType:        Which form of functional connectivity will be
 %                   performed. Options are seed2voxel and roi2roi. String.
 
-fconnType = settings.fconnType;
+fConnType = settings.fConnType;
 overwrite = settings.overwrite;
 
-switch fconnType
+switch fConnType
     case 'seed2voxel'
         imageDir = fileparts(images{1}{1});
         parDir = fileparts(imageDir);
@@ -56,7 +56,9 @@ switch fconnType
 
                         % Write correlation (data) to corrFilename (name of output file).
                         write_corr_image(correlation{1}, corrFilename{1}, SPM.xVol);
-                        write_corr_image(correlation{2}, corrFilename{2}, SPM.xVol);
+%                         write_corr_image(correlation{2}, corrFilename{2},
+%                         SPM.xVol); % I don't think R_atanh_corr images
+%                         are necessary.
                         write_corr_image(correlation{3}, corrFilename{3}, SPM.xVol);
                     else
                         fprintf('Exists: %s\n', corrFilename{3});
@@ -65,8 +67,7 @@ switch fconnType
             end
             for jROI = 1:length(rois)
                 [outDir, fname] = fileparts(zImages{iCond}{jROI}{1});
-                outName = [outDir '/mean_' fname(1:end-12) '.nii'];
-                
+                outName = [outDir '/mean_' fname(1:end-8) '.nii'];
                 if overwrite || ~exist(outName, 'file')
                     create_summary_image(zImages{iCond}{jROI}, outName, 'mean(X)');
                 else
@@ -75,11 +76,10 @@ switch fconnType
             end
         end
     case 'roi2roi'
-        fprintf('This is not set up yet');
+        fprintf('This is not set up yet.\n');
     otherwise
-        error('I cannot make sense of this.');
+        error('I cannot make sense of this.\n');
 end
-
 end
 
 %% Beta Series Correlation
@@ -179,7 +179,6 @@ cwd = pwd;
 cd(pathstr);
 
 CorrIm = spm_create_vol(CorrIm, 'noopen');
-
 [~] = spm_write_vol(CorrIm, corrData);
 
 cd(cwd);
@@ -256,3 +255,61 @@ for n = 1:length(V),
     funcXYZ{n} = tmp(1:3,:);
 end
 end
+
+%% Write Out Mean Image
+function create_summary_image(cellVols, outName, expr)
+% FORMAT create_summary_image(cellVols, outName, expr)
+% Calls spm_imcalc to perform calculations (sum, mean, std) on a cell array
+% of volumes to output one summary volume.
+%
+% cellVols:         Cell array of images upon which calculations will be
+%                   performed.
+% outName:          The name (with full path) of the image to be written. String.
+% expr:             The calculation to be performed upon the images in cellVols.
+%                   String. Possible values: sum(X), mean(X), std(X), maybe others.
+
+for iVol = 1:length(cellVols)
+    Vi(iVol) = spm_vol(cellVols{iVol});
+end
+Vo = Vi(1);
+Vo.fname = outName;
+
+spm_imcalc(Vi, Vo, expr, {1, 0, 0});
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
