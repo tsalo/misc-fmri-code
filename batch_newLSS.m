@@ -18,8 +18,11 @@ settings.overwrite = 0;        % 0- do not overwrite, 1- overwrite
 
 % Connectivity settings
 rois = {'/nfs/ep2/masks/072313_EPC_BP_SZ/L_Fusiform_r5.nii'
-        '/nfs/ep2/masks/072313_EPC_BP_SZ/L_Inf_Parietal_r5.nii'};
-settings.fconnType = 'seed2voxel'; % seed2voxel or roi2roi
+        '/nfs/ep2/masks/072313_EPC_BP_SZ/L_Inf_Parietal_r5.nii'
+        '/nfs/ep2/masks/072313_EPC_BP_SZ/gtmasks/I_Ant_Cingulum_r5.nii'
+        '/nfs/ep2/masks/072313_EPC_BP_SZ/gtmasks/L_Mid_Occipital_r5.nii'
+        '/nfs/ep2/masks/072313_EPC_BP_SZ/gtmasks/R_Mid_Occipital_r5.nii'};
+settings.fConnType = 'roi2roi'; % seed2voxel or roi2roi
 
 for iSubj = 1:length(subjects)
     spmDir = [spmFolder subjects{iSubj} spmSubFolder];

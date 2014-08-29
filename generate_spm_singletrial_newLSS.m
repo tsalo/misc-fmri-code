@@ -91,13 +91,13 @@ if settings.model == 2
         for jCond = 1:length(SPM.Sess(iSess).U)
             % Check for special condition names to ignore
             if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions)
-                if strcmp(ignoreConditions{1}, 'NONE')
-                else
-                    fprintf('\nIgnoring conditions:\n')
-                    for kCond = 1:length(ignoreConditions)
-                        fprintf('\t\t%s\n', ignoreConditions{kCond});
-                    end
-                end
+%                 if strcmp(ignoreConditions{1}, 'NONE')
+%                 else
+%                     fprintf('\nIgnoring conditions:\n')
+%                     for kCond = 1:length(ignoreConditions)
+%                         fprintf('\t\t%s\n', ignoreConditions{kCond});
+%                     end
+%                 end
             % Otherwise set up a model for each individual trial
             else
                 for kCond = 1:length(SPM.Sess(iSess).U)
@@ -117,81 +117,84 @@ if settings.model == 2
                         end
                     end
                 end
-                
-                for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
-                    % Set onsets and durations. setdiff will reorder alphabetically/numerically,
-                    % but that should not matter.
-                    onsets = {};
-                    durations = {};
-                    names = {};
-                    
-                    singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' sprintf('%03d', kTrial)];
-                    otherSameCondName = ['OTHER_' SPM.Sess(iSess).U(jCond).name{1}];
+                if settings.overwrite || ~exist([betaDir '4D_' allConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
+                    for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
+                        % Set onsets and durations. setdiff will reorder alphabetically/numerically,
+                        % but that should not matter.
+                        onsets = {};
+                        durations = {};
+                        names = {};
 
-                    singleOnset = SPM.Sess(iSess).U(jCond).ons(kTrial);
-                    singleDuration = SPM.Sess(iSess).U(jCond).dur(kTrial);
-                    [otherSameCondOnsets, index] = setdiff(SPM.Sess(iSess).U(jCond).ons, SPM.Sess(iSess).U(jCond).ons(kTrial));
-                    otherSameCondDurations = SPM.Sess(iSess).U(jCond).dur(index);
-                    
-                    onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
-                    durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
-                    names = [names singleName otherSameCondName otherDiffCondNames];
-                    
-                    % Make trial directory
-                    trialDir = [outDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
-                    if ~exist(trialDir,'dir')
-                        mkdir(trialDir)
-                    end
+                        singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' sprintf('%03d', kTrial)];
+                        otherSameCondName = ['OTHER_' SPM.Sess(iSess).U(jCond).name{1}];
 
-                    % Add trial information
-                    currInfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial...
-                        length(SPM.Sess(iSess).U(jCond).ons(kTrial)) singleName trialDir...
-                        ['Sess' sprintf('%03d', iSess) '_' singleName '.img']};
-                    trialInfo = [trialInfo; currInfo];
-                    
-                    % Save regressor onset files
-                    regFile = [trialDir 'st_regs.mat'];
-                    save(regFile, 'names', 'onsets', 'durations');
+                        singleOnset = SPM.Sess(iSess).U(jCond).ons(kTrial);
+                        singleDuration = SPM.Sess(iSess).U(jCond).dur(kTrial);
+                        [otherSameCondOnsets, index] = setdiff(SPM.Sess(iSess).U(jCond).ons, SPM.Sess(iSess).U(jCond).ons(kTrial));
+                        otherSameCondDurations = SPM.Sess(iSess).U(jCond).dur(index);
 
-                    covFile = [trialDir 'st_covs.txt'];
-                    dlmwrite(covFile, covariates, '\t');
+                        onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
+                        durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
+                        names = [names singleName otherSameCondName otherDiffCondNames];
 
-                    % Create matlabbatch for creating new SPM.mat file
-                    matlabbatch = create_spm_init(trialDir, SPM);
-                    matlabbatch = create_spm_sess(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
+                        % Make trial directory
+                        trialDir = [outDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
+                        if ~exist(trialDir,'dir')
+                            mkdir(trialDir)
+                        end
 
-                    % Run matlabbatch to create new SPM.mat file using SPM batch tools
-                    if counter == 1
-                        spm_jobman('initcfg')
-                        spm('defaults', 'FMRI');
-                    end
-                    if settings.overwrite || ~exist([trialDir 'beta_0001.img'], 'file')
-                        fprintf('\nCreating SPM.mat file:\n%s\n\n', [trialDir 'SPM.mat']);
-                        spm_jobman('serial', matlabbatch);
-                        runBatches = 1;
-                    else
-                        fprintf('Exists: %s\n', [trialDir 'beta_0001.img']);
-                        runBatches = 0;
-                    end
-                    counter = counter + 1;
-                    
-                    if settings.estimate && runBatches % optional: estimate SPM model
-                        fprintf('\nEstimating model from SPM.mat file.\n');
-                        spmFile = [trialDir 'SPM.mat'];
-                        matlabbatch = estimate_spm(spmFile);
-                        spm_jobman('serial', matlabbatch);
-                        clear matlabbatch
+                        % Add trial information
+                        currInfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial...
+                            length(SPM.Sess(iSess).U(jCond).ons(kTrial)) singleName trialDir...
+                            ['Sess' sprintf('%03d', iSess) '_' singleName '.img']};
+                        trialInfo = [trialInfo; currInfo];
 
-                        % Copy first beta image to beta directory
-                        copyfile([trialDir 'beta_0001.img'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
-                        copyfile([trialDir 'beta_0001.hdr'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
-                        
-                        % Discard extra files, if desired
-                        if settings.deleteFiles
-                            prevDir = pwd;
-                            cd(trialDir);
-                            delete SPM*; delete *.hdr; delete *.img;
-                            cd(prevDir);
+                        % Save regressor onset files
+                        regFile = [trialDir 'st_regs.mat'];
+                        save(regFile, 'names', 'onsets', 'durations');
+
+                        covFile = [trialDir 'st_covs.txt'];
+                        dlmwrite(covFile, covariates, '\t');
+
+                        % Create matlabbatch for creating new SPM.mat file
+                        matlabbatch = create_spm_init(trialDir, SPM);
+                        matlabbatch = create_spm_sess(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
+
+                        % Run matlabbatch to create new SPM.mat file using SPM batch tools
+                        if counter == 1
+                            spm_jobman('initcfg')
+                            spm('defaults', 'FMRI');
+                        end
+                        if settings.overwrite || ~exist([trialDir 'beta_0001.img'], 'file')
+                            fprintf('\nCreating SPM.mat file:\n%s\n\n', [trialDir 'SPM.mat']);
+                            spm_jobman('serial', matlabbatch);
+                            clear matlabbatch
+                            runBatches = 1;
+                        else
+%                             fprintf('Exists: %s\n', [trialDir 'beta_0001.img']);
+                            clear matlabbatch
+                            runBatches = 0;
+                        end
+                        counter = counter + 1;
+
+                        if settings.estimate && runBatches % optional: estimate SPM model
+                            fprintf('\nEstimating model from SPM.mat file.\n');
+                            spmFile = [trialDir 'SPM.mat'];
+                            matlabbatch = estimate_spm(spmFile);
+                            spm_jobman('serial', matlabbatch);
+                            clear matlabbatch
+
+                            % Copy first beta image to beta directory
+                            copyfile([trialDir 'beta_0001.img'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
+                            copyfile([trialDir 'beta_0001.hdr'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
+
+                            % Discard extra files, if desired
+                            if settings.deleteFiles
+                                prevDir = pwd;
+                                cd(trialDir);
+                                delete SPM*; delete *.hdr; delete *.img;
+                                cd(prevDir);
+                            end
                         end
                     end
                 end
