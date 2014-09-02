@@ -27,8 +27,6 @@ function images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignor
 % settings:              Additional settings. Structure.
 % settings.model:        Which model type you wish to run: Rissman beta
 %                        series (1) or LS-S multiple models (2). Double.
-% settings.estimate:     Estimate generated SPM models (1) or not (0).
-%                        Double.
 % settings.overwrite:    Overwrite any pre-existing files (1) or not (0).
 %                        Double.
 % settings.deleteFiles:  Delete intermediate files (1) or not (0). Double.
@@ -55,6 +53,7 @@ function images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignor
 fprintf('\nLoading previous model for %s:\n%s\n', subject, [spmDir, '/SPM.mat']);
 if exist([spmDir '/SPM.mat'],'file')
     load([spmDir '/SPM.mat'])
+    SPM_orig = SPM;
 else
     error('Cannot find SPM.mat file.');
 end
@@ -68,15 +67,14 @@ end
 fprintf('\nGetting model information...\n');
 files = SPM.xY.P;
 fprintf('Modeling %i timepoints across %i sessions.\n', size(files, 1), length(SPM.Sess));
+% Make trial directory
+betaDir = [outDir 'betas/'];
+if ~exist(betaDir, 'dir')
+    mkdir(betaDir)
+end
 
 % MULTI-MODEL APPROACH
 if settings.model == 2
-    % Make trial directory
-    betaDir = [outDir 'betas/'];
-    if ~exist(betaDir, 'dir')
-        mkdir(betaDir)
-    end
-
     % Set up beta information
     trialInfo = {'beta_number' 'session' 'condition' 'condition_rep' 'number_onsets' 'beta_name' 'trial_dir' 'beta_name'};
     counter = 1;
@@ -177,7 +175,7 @@ if settings.model == 2
                         end
                         counter = counter + 1;
 
-                        if settings.estimate && runBatches % optional: estimate SPM model
+                        if runBatches
                             fprintf('\nEstimating model from SPM.mat file.\n');
                             spmFile = [trialDir 'SPM.mat'];
                             matlabbatch = estimate_spm(spmFile);
@@ -231,11 +229,14 @@ if settings.model == 2
 
 % MULTI-REGRESSOR APPROACH
 elseif settings.model == 1
+    spmFile = [outDir 'SPM.mat'];
+    
     % Set up beta information
     trialInfo = {'beta_number' 'session' 'condition' 'condition_rep' 'number_onsets' 'first_onset' 'beta_name'};
     counter = 1;
 
     % Loop across sessions
+    wantedConds = {};
     for iSess = 1:length(SPM.Sess)
         rows = SPM.Sess(iSess).row;
         sessFiles = files(rows', :);
@@ -259,6 +260,7 @@ elseif settings.model == 1
                 counter = counter + 1;
             % Otherwise set up a regressor for each individual trial
             else
+                wantedConds{length(wantedConds) + 1} = SPM.Sess(iSess).U(jCond).name{1};
                 for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
                     onsets = [onsets SPM.Sess(iSess).U(jCond).ons(kTrial)];
                     durations = [durations SPM.Sess(iSess).U(jCond).dur(kTrial)];
@@ -274,44 +276,65 @@ elseif settings.model == 1
         end
 
         % Save regressor onset files
-        fprintf('Saving regressor onset files for Session %i: %i trials included\n', iSess, length(names));
-        regFile = [outDir 'st_regs_run' num2str(iSess) '.mat'];
-        save(regFile,'names', 'onsets', 'durations');
+        if settings.overwrite || ~exist(spmFile, 'file')
+            fprintf('Saving regressor onset files for Session %i: %i trials included\n', iSess, length(names));
+            regFile = [outDir 'st_regs_run' num2str(iSess) '.mat'];
+            save(regFile, 'names', 'onsets', 'durations');
 
-        % Save covariates (e.g., motion parameters) that were specified
-        % in the original model
-        covFile = [outDir 'st_covs_run' num2str(iSess) '.txt'];
-        dlmwrite(covFile, covariates, '\t');
-        if ~isempty(covariates)
-            for icov = 1:size(covariates, 2)
-                currInfo = {counter iSess 'covariate' icov 1 0 strcat('covariate',num2str(icov))};
-                trialInfo = [trialInfo; currInfo];
+            % Save covariates (e.g., motion parameters) that were specified
+            % in the original model
+            covFile = [outDir 'st_covs_run' num2str(iSess) '.txt'];
+            dlmwrite(covFile, covariates, '\t');
+            if ~isempty(covariates)
+                for icov = 1:size(covariates, 2)
+                    currInfo = {counter iSess 'covariate' icov 1 0 strcat('covariate',num2str(icov))};
+                    trialInfo = [trialInfo; currInfo];
+                    counter = counter + 1;
+                end
+            end
+
+            % Create matlabbatch for creating new SPM.mat file
+            if iSess == 1
+                matlabbatch = create_spm_init(outDir, SPM);
+            end
+            matlabbatch = create_spm_sess(matlabbatch, iSess, sessFiles, regFile, covFile, SPM);
+            
+            % Save beta information
+            infofile = [outDir 'beta_info.mat'];
+            save(infofile, 'trialInfo');
+
+            % Run matlabbatch to create new SPM.mat file using SPM batch tools
+            fprintf('\nCreating SPM.mat file:\n%s\n', [outDir 'SPM.mat']);
+            spm_jobman('initcfg')
+            spm('defaults', 'FMRI');
+            spm_jobman('serial', matlabbatch);
+
+            fprintf('\nEstimating model from SPM.mat file.\n');
+            matlabbatch = estimate_spm(spmFile);
+            spm_jobman('serial', matlabbatch);
+        end
+    end
+
+    load(spmFile);
+    wantedConds = unique(wantedConds);
+    for iCond = 1:length(wantedConds)
+        counter = 1;
+        for jBeta = 1:length(SPM.Vbeta)
+            if strfind(SPM.Vbeta(jBeta).descrip, wantedConds{iCond})
+                cellVols{counter} = [SPM.swd '/' SPM.Vbeta(jBeta).fname ',1'];
                 counter = counter + 1;
             end
         end
-
-        % Create matlabbatch for creating new SPM.mat file
-        if iSess == 1
-            matlabbatch = create_spm_init(outDir,SPM);
+        images{iCond}{1} = [betaDir '4D_' wantedConds{iCond} '.nii'];
+        matlabbatch{1}.spm.util.cat.name = [betaDir '4D_' wantedConds{iCond} '.nii'];
+        matlabbatch{1}.spm.util.cat.vols = cellVols;
+        matlabbatch{1}.spm.util.cat.dtype = 0;
+        if settings.overwrite || ~exist([betaDir '4D_' wantedConds{iCond} '.nii'], 'file')
+            save([betaDir '3Dto4D_jobfile.mat'], 'matlabbatch');
+            spm_jobman('run', matlabbatch);
+        else
+            fprintf('Exists: %s\n', [betaDir '4D_' wantedConds{iCond} '.nii']);
         end
-        matlabbatch = create_spm_sess(matlabbatch,iSess,sessFiles,regFile,covFile,SPM);
-    end
-
-    % Save beta information
-    infofile = [outDir 'beta_info.mat'];
-    save(infofile, 'trialInfo');
-
-    % Run matlabbatch to create new SPM.mat file using SPM batch tools
-    fprintf('\nCreating SPM.mat file:\n%s\n', [outDir 'SPM.mat']);
-    spm_jobman('initcfg')
-    spm('defaults', 'FMRI');
-    spm_jobman('serial', matlabbatch);
-
-    if settings.estimate > 0 % optional: estimate SPM model
-        fprintf('\nEstimating model from SPM.mat file.\n');
-        spmFile = [outDir 'SPM.mat'];
-        matlabbatch = estimate_spm(spmFile);
-        spm_jobman('serial', matlabbatch);
     end
 
     clear SPM matlabbatch

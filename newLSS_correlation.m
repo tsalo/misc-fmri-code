@@ -74,7 +74,10 @@ switch settings.fConnType
                 [outDir, fname] = fileparts(zImages{iCond}{jROI}{1});
                 outName = [outDir '/mean_' fname(1:end-8) '.nii'];
                 if settings.overwrite || ~exist(outName, 'file')
-                    create_summary_image(zImages{iCond}{jROI}, outName, 'mean(X)');
+                    % If there are multiple runs (i.e. LSS), create a mean file.
+                    if length(zImages{iCond}{jROI}) > 1
+                        create_summary_image(zImages{iCond}{jROI}, outName, 'mean(X)');
+                    end
                 else
                     fprintf('Exists: %s\n', outName);
                 end
@@ -95,6 +98,7 @@ switch settings.fConnType
                 % Get rid of 4D from file name.
                 [~, fileName, ~] = fileparts(images{iCond}{jSess});
                 fileName = fileName(3:end);
+                
                 % Create file names for condition outputs.
                 corrMatrixName = [outDir '/Zcorr' fileName '.mat'];
                 zImages{iCond}{jSess} = corrMatrixName;
@@ -123,22 +127,26 @@ switch settings.fConnType
             end
             [outDir, fname] = fileparts(zImages{iCond}{1});
             outName = [outDir '/mean_' fname(1:end-8) '.mat'];
+            
             if settings.overwrite || ~exist(outName, 'file')
-                allCorr = [];
-                for jSess = 1:length(images{iCond})
-                    load(zImages{iCond}{jSess});
-                    allCorr(:, :, jSess) = corrStruct.corrMatrix;
-                    meanStruct.rois = corrStruct.rois;
-                    clear corrStruct
+                % If there are multiple runs (i.e. LSS), create a mean file.
+                if length(zImages{iCond}) > 1
+                    allCorr = [];
+                    for jSess = 1:length(images{iCond})
+                        load(zImages{iCond}{jSess});
+                        allCorr(:, :, jSess) = corrStruct.corrMatrix;
+                        meanStruct.rois = corrStruct.rois;
+                        clear corrStruct
+                    end
+                    meanStruct.meanCorr = mean(allCorr, 3);
+                    save(outName, 'meanStruct');
                 end
-                meanStruct.meanCorr = mean(allCorr, 3);
-                save(outName, 'meanStruct');
             else
                 fprintf('Exists: %s\n', outName);
             end
         end
     otherwise
-        error('I cannot make sense of this.\n');
+        error(['I cannot make sense of this: ' settings.fConnType]);
 end
 end
 
@@ -158,7 +166,7 @@ function meanROI = extract_beta_series(niiLoc, roiLoc, trimsd)
 %                   the raw data to be Windsorized. Set to 0 if the raw 
 %                   data are to be used. LSS default is 3. Double.
 
-if ~exist('trimsd','var'), trimsd = 3; end
+if ~exist('trimsd', 'var'), trimsd = 3; end
 threshold = 0; % Find mask values greater than this
 
 % Get header info for beta data.
@@ -208,7 +216,7 @@ function Cout = beta_series_corr(niiLoc, SPM, meanROI, trimsd)
 % trimsd:           The number of standard deviations to use if you wish 
 %                   the raw data to be Windsorized. Set to 0 if the raw 
 %                   data are to be used. LSS default is 3. Double.
-
+if ~exist('trimsd', 'var'), trimsd = 3; end
 V = spm_vol(niiLoc);
 allDataAtBetas = spm_get_data(V, SPM.xVol.XYZ);
 Cout = cell(3); Cout{1} = zeros(1, size(allDataAtBetas, 2));
@@ -322,7 +330,7 @@ function funcXYZ = adjust_XYZ(XYZ, ROImat, V)
 % V:                Header information of nifti file from spm_vol.
 
 XYZ(4,:) = 1;
-funcXYZ=cell(length(V));
+funcXYZ = cell(length(V));
 for n = 1:length(V),
     if(iscell(V)),
        tmp = inv(V{n}.mat) * (ROImat * XYZ);
@@ -353,40 +361,3 @@ Vo.fname = outName;
 
 spm_imcalc(Vi, Vo, expr, {1, 0, 0});
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
