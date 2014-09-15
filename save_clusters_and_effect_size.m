@@ -7,43 +7,89 @@ function save_clusters_and_effect_size(spmFile, pThr, corr, k)
 % outputted csv.
 %
 %
-% spmFile: Path to SPM.mat file (including SPM.mat). String.
-% pThr:    p threshold. Cell array (1x1 or 1x2) of doubles.
-% corr:    Correction applied to p threshold (FWE, FDR, or unc). Cell array
-%          (same length as pThr) of strings.
-% k:       Minimum acceptable cluster size. Double.
+% spmFile:          Path to SPM.mat file (including SPM.mat). String.
+% pThr:             p threshold. Cell array (1x1 or 1x2) of doubles.
+% corr:             Correction applied to p threshold (FWE, FDR, or unc).
+%                   Cell array (same size as pThr) of strings.
+% k:                Minimum acceptable cluster size. Double.
 
+%% Check inputs
 if exist(spmFile, 'file')
     [path, ~] = fileparts(spmFile);
     load(spmFile);
 else
     error('spmFile does not exist. Quitting.');
 end
+if iscell(pThr)
+    [m, n] = size(pThr);
+    if m * n > 2
+        fprintf(['pThr is ' num2str(m) 'x' num2str(n) '.\n\tSetting pThr to {0.01 0.05} and corr to {"unc" "FWE"}.\n']);
+        pThr = {0.01 0.05};
+        corr = {'unc' 'FWE'};
+    elseif m * n == 2
+        for iP = 1:length(pThr)
+            if ~isa(pThr{iP}, 'double')
+                fprintf(['pThr{' num2str(iP) '} is not double.\n\tSetting pThr to {0.01 0.05} and corr to {"unc" "FWE"}.\n']);
+                pThr = {0.01 0.05};
+                corr = {'unc' 'FWE'};
+                break
+            end
+        end
+    else
+        if ~isa(pThr{1}, 'double')
+            fprintf('pThr{1} is not double.\n\tSetting pThr to {0.001} and corr to {"unc"}.\n');
+            pThr = {0.001};
+            corr = {'unc'};
+        end
+    end
+else
+    fprintf('pThr is not a 1x2 or 2x1 cell array of doubles.\n\tSetting pThr to {0.01 0.05} and corr to {"unc" "FWE"}.\n');
+    pThr = {0.01 0.05};
+    corr = {'unc' 'FWE'};
+end
+if iscellstr(corr)
+    if length(corr) ~= length(pThr)
+        fprintf('pThr and corr are different lengths.\n');
+        if length(pThr) == 2
+            fprintf('\tSetting corr to {"unc" "FWE"}.\n');
+            corr = {'unc' 'FWE'};
+        else
+            fprintf('\tSetting corr to {"unc"}.\n');
+            corr = {'unc'};
+        end
+    else
+        if length(corr) == 1
+            if ~cellstrfind(corr{1}, {'unc' 'FWE' 'FDR'}, 'exact')
+                fprintf('corr must be composed of "unc", "FWE" or, "FDR".\n\tSetting corr to {"unc"}.\n');
+                corr = {'unc'};
+            end
+        else
+            if ~cellstrfind(corr{1}, {'unc' 'FWE' 'FDR'}, 'exact')
+                fprintf('corr must be composed of "unc", "FWE" or, "FDR".\n\tSetting corr{1} to "unc".\n');
+                corr{1} = 'unc';
+            end
+            if ~cellstrfind(corr{2}, {'unc' 'FWE' 'FDR'}, 'exact')
+                fprintf('corr must be composed of "unc", "FWE" or, "FDR".\n\tSetting corr{2} to "FWE".\n');
+                corr{2} = 'FWE';
+            end
+        end
+    end
+else
+    fprintf('corr is not a cellstr.\n');
+    if length(pThr) == 2
+        fprintf('\tSetting corr to {"unc" "FWE"}.\n');
+        corr = {'unc' 'FWE'};
+    else
+        fprintf('\tSetting corr to {"unc"}.\n');
+        corr = {'unc'};
+    end
+end
+if ~isa(k, 'double')
+    fprintf('Warning, your set k is not a double. Setting to default 5.\n');
+    k = 5;
+end
 
-% if iscell(pThr)
-%     fprintf('Warning, your set p threshold is a string. Trying to convert to double.\n')
-%     pThr = str2double(pThr);
-%     if isnan(pThr)
-%         fprintf('P threshold could not be converted to double, setting to default 0.001.\n');
-%         pThr = 0.001;
-%     end
-% elseif ~isa(pThr, 'double')
-%     fprintf('Warning, your set p threshold is not a double or a string. Setting to default 0.001.\n');
-%     pThr = 0.001;
-% end
-% 
-% if ischar(k)
-%     fprintf('Warning, your set k is a string. Trying to convert to double.\n')
-%     k = str2double(k);
-%     if isnan(k)
-%         fprintf('P threshold could not be converted to double, setting to default 5.\n');
-%         k = 5;
-%     end
-% elseif ~isa(k, 'double')
-%     fprintf('Warning, your set k is not a double or a string. Setting to default 5.\n');
-%     k = 5;
-% end
-
+%% Do everything else.
 design = SPM.xsDes.Design;
 fprintf(['Evaluating second-level results of design: ' design '.\n']);
 if length(pThr) == 1
@@ -67,15 +113,16 @@ for iCon = 1:length(SPM.xCon)
         xSPM.Ic = iCon;
         xSPM.R = SPM.xVol.R;
         xSPM.FWHM = SPM.xVol.FWHM;
+        xSPM.DIM = SPM.xVol.DIM;
         
         spmT = [path '/' SPM.xCon(iCon).Vspm.fname];
         conName = ['Contrast_' sprintf('%03d', iCon) '-' strrep(SPM.xCon(iCon).name, ' ', '_')];
         fprintf(['\tEvaluating contrast ' num2str(iCon) ', ' conName '\n']);
         
         if length(pThr) == 1
-            outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_clusters/' conName '/'];
+            outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_k' num2str(k) '_clusters/' conName '/'];
         else
-            outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_c' num2str(pThr{2}) '_' corr{2} '_clusters/' conName '/'];
+            outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_k' num2str(k) '_c' num2str(pThr{2}) '_' corr{2} '_clusters/' conName '/'];
         end
         
         if ~exist(outDir, 'dir')
@@ -96,7 +143,6 @@ for iCon = 1:length(SPM.xCon)
         voxelScalar = sizeX * sizeY * sizeZ;
         xSPM.VOX = [sizeX sizeY sizeZ];
         xSPM.units = {'mm' 'mm' 'mm'};
-        xSPM.DIM = SPM.xVol.DIM;
         
         % Set up output csv.
         clear outStruct
@@ -163,10 +209,12 @@ for iCon = 1:length(SPM.xCon)
         end
 
         % Cluster row index.
-        clustLevel = table(:, 1);
-        clustIdx = find(~cellfun(@isempty, clustLevel));
+        clustLevelCol = table(:, 1);
+        clustIdx = find(~cellfun(@isempty, clustLevelCol));
 
-        % Pare down table
+        % Pare down table to cluster-level significant clusters if
+        % cluster-extent based thresholding is being applied. Else, keep as
+        % is.
         if length(pThr) == 2
             for iClust = length(clustIdx):-1:1
                 if iClust == length(clustIdx)
@@ -180,31 +228,35 @@ for iCon = 1:length(SPM.xCon)
                 end
             end
         end
-        clustLevel = table(:, 1);
-        clustIdx = find(~cellfun(@isempty, clustLevel));
+        clustLevelCol = table(:, 1);
+        clustIdx = find(~cellfun(@isempty, clustLevelCol));
                 
         clear x y z XYZ
         
         clustHeader = VspmT;
         rawData = spm_read_vols(VspmT);
-        [allClustMat, nClusters] = spm_bwlabel(double(rawData > xSPM.u), 18);
+        [allClustVals, nClusters] = spm_bwlabel(double(rawData > xSPM.u), 18);
 
-        [clustSize, clustNum] = sort(histc(allClustMat(:), 0:nClusters), 1, 'descend');
+        [clustSize, clustNum] = sort(histc(allClustVals(:), 0:nClusters), 1, 'descend');
         clustSize = clustSize(2:end); clustNum = clustNum(2:end) - 1;
         clustNum = clustNum(clustSize >= k); clustSize = clustSize(clustSize >= k);
 
-        for jClust = 1:length(clustSize)
-            oneClustMat = zeros(size(allClustMat));
-            oneClustMat(allClustMat == clustNum(jClust)) = 1;
-            [x, y, z] = ind2sub(size(oneClustMat), find(oneClustMat == 1));
-            XYZ = [x'; y'; z'];
-            betaXYZ = adjust_XYZ(XYZ, clustHeader.mat, dHeader);
-            roi = spm_get_data(dHeader.fname, betaXYZ{1});
-            roi(isnan(roi)) = 0;
+        for jClust = 1:length(clustNum)
+            oneClustVals = zeros(size(allClustVals));
+            oneClustVals(allClustVals == clustNum(jClust)) = 1;
+            [x, y, z] = ind2sub(size(oneClustVals), find(oneClustVals == 1));
+            clustXYZ = [x'; y'; z'];
+            adjClustXYZ = adjust_XYZ(clustXYZ, clustHeader.mat, dHeader);
             clustNumber = 0;
+            
+            % Determine which cluster you're looking at and fill in that
+            % position in the output table. Basically we're merging the
+            % information about the clusters from the table with the
+            % information found through more direct means, including effect
+            % size.
             for kClust = 1:length(clustIdx)
                 peakMM(1:3) = (table{clustIdx(kClust), 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-                if sum(ismember(betaXYZ{1}.', peakMM, 'rows'))
+                if sum(ismember(adjClustXYZ{1}.', peakMM, 'rows'))
                     clustNumber = kClust;
                     clustPeakMM = peakMM;
                 end
@@ -212,12 +264,11 @@ for iCon = 1:length(SPM.xCon)
             if clustNumber ~= 0
                 peakCoord = table{clustIdx(clustNumber), 10}.';
                 clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
-                spm_write_vol(clustHeader, oneClustMat);
+                spm_write_vol(clustHeader, oneClustVals);
                 
                 % Fill in output csv.
                 outStruct{1}.col{clustIdx(clustNumber), 1} = '';
                 outStruct{2}.col{clustIdx(clustNumber), 1} = '';
-                
                 
                 if table{clustIdx(clustNumber), 10}(1) < 0
                     outStruct{3}.col{clustIdx(clustNumber), 1} = 'L';
@@ -226,6 +277,7 @@ for iCon = 1:length(SPM.xCon)
                 else
                     outStruct{3}.col{clustIdx(clustNumber), 1} = 'I';
                 end
+                
                 outStruct{4}.col{clustIdx(clustNumber), 1} = clustSize(jClust) * voxelScalar;
                 outStruct{5}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
                 outStruct{6}.col{clustIdx(clustNumber), 1} = Dvals(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
@@ -238,11 +290,11 @@ for iCon = 1:length(SPM.xCon)
                 else
                     nRows = clustIdx(clustNumber + 1) - 1;
                 end
+                
                 for mSubClust = clustIdx(clustNumber) + 1:nRows
-                    subPeakMM = (table{mSubClust, 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-
                     outStruct{1}.col{mSubClust, 1} = '';
                     outStruct{2}.col{mSubClust, 1} = '';
+                    
                     if table{mSubClust, 10}(1) < 0
                         outStruct{3}.col{mSubClust, 1} = 'L';
                     elseif table{mSubClust, 10}(1) > 0
@@ -250,8 +302,10 @@ for iCon = 1:length(SPM.xCon)
                     else
                         outStruct{3}.col{mSubClust, 1} = 'I';
                     end
+                    
                     outStruct{4}.col{mSubClust, 1} = '';
                     outStruct{5}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
+                    subPeakMM = (table{mSubClust, 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
                     outStruct{6}.col{mSubClust, 1} = Dvals(subPeakMM(1), subPeakMM(2), subPeakMM(3));
                     outStruct{7}.col{mSubClust, 1} = table{mSubClust, 10}(1);
                     outStruct{8}.col{mSubClust, 1} = table{mSubClust, 10}(2);
@@ -275,6 +329,14 @@ function [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
 % FORMAT [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
 % Determines size of voxel in X, Y, and Z dimensions. This assumes that the
 % matrix is not diagonal, but works fine if it is.
+%
+%
+% niiFile:          Nifti file from which voxel size will be determined.
+%                   String.
+%
+% sizeX (output):   Size in mm of voxel in X dimension. Double.
+% sizeY (output):   Size in mm of voxel in Y dimension. Double.
+% sizeZ (output):   Size in mm of voxel in Z dimension. Double.
 V = spm_vol(niiFile);
 mniO = (V.mat * [1 1 1 1]')';
 mniX = (V.mat * [2 1 1 1]')';
@@ -291,8 +353,8 @@ function funcXYZ = adjust_XYZ(XYZ, ROImat, V)
 % By Dennis Thompson.
 %
 %
-% XYZ:              Output from lss_roi_find_index.
-% ROImat:           Output from lss_roi_find_index.
+% XYZ:              XYZ coordinates of ones in binary matrix.
+% ROImat:           Transformation matrix from ROI file.
 % V:                Header information of nifti file from spm_vol.
 XYZ(4, :) = 1;
 funcXYZ = cell(length(V));

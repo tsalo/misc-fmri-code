@@ -88,7 +88,7 @@ if settings.model == 2
 
         for jCond = 1:length(SPM.Sess(iSess).U)
             % Check for special condition names to ignore
-            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions)
+            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
 %                 if strcmp(ignoreConditions{1}, 'NONE')
 %                 else
 %                     fprintf('\nIgnoring conditions:\n')
@@ -249,7 +249,7 @@ elseif settings.model == 1
 
         for jCond = 1:length(SPM.Sess(iSess).U)
             % Check for special condition names to lump together
-            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions)
+            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
                 onsets = [onsets SPM.Sess(iSess).U(jCond).ons'];
                 durations = [durations SPM.Sess(iSess).U(jCond).dur'];
                 singleName = [SPM.Sess(iSess).U(jCond).name{1}];
