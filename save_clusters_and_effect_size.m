@@ -90,6 +90,8 @@ if ~isa(k, 'double')
 end
 
 %% Do everything else.
+origDir = pwd;
+cd(path);
 design = SPM.xsDes.Design;
 fprintf(['Evaluating second-level results of design: ' design '.\n']);
 if length(pThr) == 1
@@ -149,6 +151,7 @@ for iCon = 1:length(SPM.xCon)
         outStruct{1}.header{1} = 'Region of Activation'; outStruct{2}.header{1} = 'BA'; outStruct{3}.header{1} = 'L/R';
         outStruct{4}.header{1} = 'k (mm3)'; outStruct{5}.header{1} = 'T'; outStruct{6}.header{1} = 'D';
         outStruct{7}.header{1} = 'x'; outStruct{8}.header{1} = 'y'; outStruct{9}.header{1} = 'z';
+        roaCol = 1; baCol = 2; lrCol = 3; kCol = 4; tCol = 5; dCol = 6; xCol = 7; yCol = 8; zCol = 9;
         outStruct{1}.col{1} = ''; outStruct{2}.col{1} = ''; outStruct{3}.col{1} = '';
         outStruct{4}.col{1} = ''; outStruct{5}.col{1} = ''; outStruct{6}.col{1} = '';
         outStruct{7}.col{1} = ''; outStruct{8}.col{1} = ''; outStruct{9}.col{1} = '';
@@ -194,8 +197,7 @@ for iCon = 1:length(SPM.xCon)
 
         xSPM.uc = [uu up ue uc];
         
-        TabDat2 = spm_list_edited('List', xSPM);
-        table = TabDat2.dat(:, 3:end);
+        table = spm_list_edited(xSPM, 5, 8);
 
         if length(corr) == 2
             switch corr{2}
@@ -267,23 +269,23 @@ for iCon = 1:length(SPM.xCon)
                 spm_write_vol(clustHeader, oneClustVals);
                 
                 % Fill in output csv.
-                outStruct{1}.col{clustIdx(clustNumber), 1} = '';
-                outStruct{2}.col{clustIdx(clustNumber), 1} = '';
+                outStruct{roaCol}.col{clustIdx(clustNumber), 1} = '';
+                outStruct{baCol}.col{clustIdx(clustNumber), 1} = '';
                 
                 if table{clustIdx(clustNumber), 10}(1) < 0
-                    outStruct{3}.col{clustIdx(clustNumber), 1} = 'L';
+                    outStruct{lrCol}.col{clustIdx(clustNumber), 1} = 'L';
                 elseif table{clustIdx(clustNumber), 10}(1) > 0
-                    outStruct{3}.col{clustIdx(clustNumber), 1} = 'R';
+                    outStruct{lrCol}.col{clustIdx(clustNumber), 1} = 'R';
                 else
-                    outStruct{3}.col{clustIdx(clustNumber), 1} = 'I';
+                    outStruct{lrCol}.col{clustIdx(clustNumber), 1} = 'I';
                 end
                 
-                outStruct{4}.col{clustIdx(clustNumber), 1} = clustSize(jClust) * voxelScalar;
-                outStruct{5}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
-                outStruct{6}.col{clustIdx(clustNumber), 1} = Dvals(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
-                outStruct{7}.col{clustIdx(clustNumber), 1} = peakCoord(1);
-                outStruct{8}.col{clustIdx(clustNumber), 1} = peakCoord(2);
-                outStruct{9}.col{clustIdx(clustNumber), 1} = peakCoord(3);
+                outStruct{kCol}.col{clustIdx(clustNumber), 1} = clustSize(jClust) * voxelScalar;
+                outStruct{tCol}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
+                outStruct{dCol}.col{clustIdx(clustNumber), 1} = Dvals(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
+                outStruct{xCol}.col{clustIdx(clustNumber), 1} = peakCoord(1);
+                outStruct{yCol}.col{clustIdx(clustNumber), 1} = peakCoord(2);
+                outStruct{zCol}.col{clustIdx(clustNumber), 1} = peakCoord(3);
                 
                 if clustNumber == length(clustIdx)
                     [nRows, ~] = size(table);
@@ -292,24 +294,24 @@ for iCon = 1:length(SPM.xCon)
                 end
                 
                 for mSubClust = clustIdx(clustNumber) + 1:nRows
-                    outStruct{1}.col{mSubClust, 1} = '';
-                    outStruct{2}.col{mSubClust, 1} = '';
+                    outStruct{roaCol}.col{mSubClust, 1} = '';
+                    outStruct{baCol}.col{mSubClust, 1} = '';
                     
                     if table{mSubClust, 10}(1) < 0
-                        outStruct{3}.col{mSubClust, 1} = 'L';
+                        outStruct{lrCol}.col{mSubClust, 1} = 'L';
                     elseif table{mSubClust, 10}(1) > 0
-                        outStruct{3}.col{mSubClust, 1} = 'R';
+                        outStruct{lrCol}.col{mSubClust, 1} = 'R';
                     else
-                        outStruct{3}.col{mSubClust, 1} = 'I';
+                        outStruct{lrCol}.col{mSubClust, 1} = 'I';
                     end
                     
-                    outStruct{4}.col{mSubClust, 1} = '';
-                    outStruct{5}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
+                    outStruct{kCol}.col{mSubClust, 1} = '';
+                    outStruct{tCol}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
                     subPeakMM = (table{mSubClust, 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-                    outStruct{6}.col{mSubClust, 1} = Dvals(subPeakMM(1), subPeakMM(2), subPeakMM(3));
-                    outStruct{7}.col{mSubClust, 1} = table{mSubClust, 10}(1);
-                    outStruct{8}.col{mSubClust, 1} = table{mSubClust, 10}(2);
-                    outStruct{9}.col{mSubClust, 1} = table{mSubClust, 10}(3);
+                    outStruct{dCol}.col{mSubClust, 1} = Dvals(subPeakMM(1), subPeakMM(2), subPeakMM(3));
+                    outStruct{xCol}.col{mSubClust, 1} = table{mSubClust, 10}(1);
+                    outStruct{yCol}.col{mSubClust, 1} = table{mSubClust, 10}(2);
+                    outStruct{zCol}.col{mSubClust, 1} = table{mSubClust, 10}(3);
                 end
             end
         end
@@ -320,7 +322,7 @@ for iCon = 1:length(SPM.xCon)
         fprintf(['\tSkipping contrast ' num2str(iCon) ', ' SPM.xCon(iCon).name ', because it is an F con.\n']);
     end
 end
-
+cd(origDir);
 fprintf('Done.\n\n');
 end
 
