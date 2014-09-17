@@ -278,12 +278,12 @@ elseif settings.model == 1
         % Save regressor onset files
         if settings.overwrite || ~exist(spmFile, 'file')
             fprintf('Saving regressor onset files for Session %i: %i trials included\n', iSess, length(names));
-            regFile = [outDir 'st_regs_run' num2str(iSess) '.mat'];
+            regFile = [outDir 'st_regs_session_' num2str(iSess) '.mat'];
             save(regFile, 'names', 'onsets', 'durations');
 
             % Save covariates (e.g., motion parameters) that were specified
             % in the original model
-            covFile = [outDir 'st_covs_run' num2str(iSess) '.txt'];
+            covFile = [outDir 'st_covs_session_' num2str(iSess) '.txt'];
             dlmwrite(covFile, covariates, '\t');
             if ~isempty(covariates)
                 for icov = 1:size(covariates, 2)
@@ -300,21 +300,27 @@ elseif settings.model == 1
             matlabbatch = create_spm_sess(matlabbatch, iSess, sessFiles, regFile, covFile, SPM);
             
             % Save beta information
-            infofile = [outDir 'beta_info.mat'];
+            infofile = [outDir 'beta_info_session_' num2str(iSess) '.mat'];
             save(infofile, 'trialInfo');
-
-            % Run matlabbatch to create new SPM.mat file using SPM batch tools
-            fprintf('\nCreating SPM.mat file:\n%s\n', [outDir 'SPM.mat']);
-            spm_jobman('initcfg')
-            spm('defaults', 'FMRI');
-            spm_jobman('serial', matlabbatch);
-
-            fprintf('\nEstimating model from SPM.mat file.\n');
-            matlabbatch = estimate_spm(spmFile);
-            spm_jobman('serial', matlabbatch);
         end
     end
+    
+    % Run matlabbatch to create new SPM.mat file using SPM batch tools
+    if settings.overwrite || ~exist([outDir 'SPM.mat'], 'file')
+        fprintf('\nCreating SPM.mat file:\n%s\n', [outDir 'SPM.mat']);
+        spm_jobman('initcfg')
+        spm('defaults', 'FMRI');
+        spm_jobman('serial', matlabbatch);
+        clear matlabbatch
 
+        fprintf('\nEstimating model from SPM.mat file.\n');
+        matlabbatch = estimate_spm(spmFile);
+        spm_jobman('serial', matlabbatch);
+    else
+        fprintf('Exists: %s\n', [outDir 'SPM.mat']);
+    end
+    
+    clear matlabbatch
     load(spmFile);
     wantedConds = unique(wantedConds);
     for iCond = 1:length(wantedConds)
@@ -326,17 +332,17 @@ elseif settings.model == 1
             end
         end
         images{iCond}{1} = [betaDir '4D_' wantedConds{iCond} '.nii'];
-        matlabbatch{1}.spm.util.cat.name = [betaDir '4D_' wantedConds{iCond} '.nii'];
-        matlabbatch{1}.spm.util.cat.vols = cellVols;
-        matlabbatch{1}.spm.util.cat.dtype = 0;
-        if settings.overwrite || ~exist([betaDir '4D_' wantedConds{iCond} '.nii'], 'file')
-            save([betaDir '3Dto4D_jobfile.mat'], 'matlabbatch');
-            spm_jobman('run', matlabbatch);
-        else
-            fprintf('Exists: %s\n', [betaDir '4D_' wantedConds{iCond} '.nii']);
-        end
+        matlabbatch{iCond}.spm.util.cat.name = [betaDir '4D_' wantedConds{iCond} '.nii'];
+        matlabbatch{iCond}.spm.util.cat.vols = cellVols;
+        matlabbatch{iCond}.spm.util.cat.dtype = 0;
+        clear cellVols
     end
-
+    if settings.overwrite || ~exist([betaDir '4D_' wantedConds{end} '.nii'], 'file')
+        save([betaDir '3Dto4D_jobfile.mat'], 'matlabbatch');
+        spm_jobman('run', matlabbatch);
+    else
+        fprintf('Exists: %s\n', [betaDir '4D_' wantedConds{end} '.nii']);
+    end
     clear SPM matlabbatch
 else
     error('Specify model type as 1 or 2');

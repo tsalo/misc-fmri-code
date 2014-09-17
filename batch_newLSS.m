@@ -18,7 +18,7 @@ settings.overwrite = 0;        % 0- do not overwrite, 1- overwrite
 % Connectivity settings
 rois = {'/nfs/ep2/masks/072313_EPC_BP_SZ/L_Fusiform_r5.nii'
         '/nfs/ep2/masks/072313_EPC_BP_SZ/L_Inf_Parietal_r5.nii'};
-settings.fConnType = 'seed2voxel'; % seed2voxel or roi2roi
+settings.fConnType = 'roi2roi'; % seed2voxel or roi2roi
 
 for iSubj = 1:length(subjects)
     spmDir = [spmFolder subjects{iSubj} spmSubFolder];
