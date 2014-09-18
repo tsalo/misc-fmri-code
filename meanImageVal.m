@@ -1,6 +1,6 @@
 function meanVal = meanImageVal(valuesFile, maskFile)
 % FORMAT meanVal = meanImageVal(valuesFile, maskFile)
-% Gives you the mean across a ResMS file.
+% Gives you the mean across valuesFile (a nifti file), either masked by maskFile or not.
 
 if exist('maskFile', 'var')
     maskedVals = spm_summarise(valuesFile, maskFile);
