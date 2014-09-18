@@ -59,7 +59,8 @@ switch settings.fConnType
                     
                     if settings.overwrite || ~exist(corrFilename{3}, 'file')
                         % Correlate rest of brain with extracted timeseries from mask (R, R_atahn, Z).
-                        meanROI = extract_beta_series(images{iCond}{jSess}, rois{kROI});
+                        allValsROI = spm_summarise(images{iCond}{jSess}, rois{kROI});
+                        meanROI = mean(allValsROI, 2);
                         correlation = beta_series_corr(images{iCond}{jSess}, SPM, meanROI);
 
                         % Write correlation (data) to corrFilename (name of output file).
@@ -110,12 +111,13 @@ switch settings.fConnType
                     for kROI = 1:length(rois)
                         % Get ROI name
                         [~, roiNames{kROI}] = fileparts(rois{kROI});
-                        roiBetaSeries{kROI} = extract_beta_series(images{iCond}{jSess}, rois{kROI});
+                        betaSeries = spm_summarise(images{iCond}{jSess}, rois{kROI});
+                        roiBetaSeries{kROI} = mean(betaSeries, 2);
                     end
                     nTrials = length(roiBetaSeries{1});
                     for kROI = 1:length(rois)
                         for mROI = 1:length(rois)
-                            rCorr = corr(roiBetaSeries{kROI}', roiBetaSeries{mROI}', 'type', 'Pearson');
+                            rCorr = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
                             stdZ = 1 / (nTrials - 3);
                             zCorrMatrix(kROI, mROI) = atanh(rCorr) / stdZ;
                         end
@@ -150,53 +152,6 @@ switch settings.fConnType
 end
 end
 
-%% Beta Series Correlation
-function meanROI = extract_beta_series(niiLoc, roiLoc, trimsd)
-% FORMAT meanROI = extract_beta_series(niiLoc, roiLoc, trimsd)
-% Extracts and returns mean beta series from 4D niiLoc within ROI.
-% Adapted from beta_series_correlation_nomars by Dennis Thompson
-% without Events information.
-% Calls spm_vol, roi_find_index, adjust_XYZ, and spm_get_data.
-%
-%
-% niiLoc:           Path to LSS file (4D nifti) for particular condition. 
-%                   Contains data to be correlated. String.
-% roiLoc:           Path to mask file to be used. String.
-% trimsd:           The number of standard deviations to use if you wish 
-%                   the raw data to be Windsorized. Set to 0 if the raw 
-%                   data are to be used. LSS default is 3. Double.
-
-if ~exist('trimsd', 'var'), trimsd = 3; end
-threshold = 0; % Find mask values greater than this
-
-% Get header info for beta data.
-V = spm_vol(niiLoc);
-
-% Get ROI index and transform matrix.
-if exist(roiLoc, 'file')
-    [XYZ ROImat] = roi_find_index(roiLoc, threshold);
-else
-    error('Mask not found: %s\n', roiLoc);
-end
-
-% Generate XYZ locations for each beta image correcting for alignment
-% issues and preallocate meanROI vector.
-betaXYZ = adjust_XYZ(XYZ, ROImat, V);
-meanROI = zeros(1, length(betaXYZ));
-
-% Extract mean of ROI from each beta.
-for iBeta = 1:length(betaXYZ),
-    betasInROI = spm_get_data(V(iBeta), betaXYZ{iBeta});
-    meanROI(iBeta) = nanmean(betasInROI(:));
-end
-
-clear betasInROI
-
-if trimsd > 0,
-    meanROI = trimts(meanROI, trimsd);
-end
-end
-
 %% Create Correlation image
 function Cout = beta_series_corr(niiLoc, SPM, meanROI, trimsd)
 % FORMAT Cout = beta_series_corr(niiLoc, SPM, meanROI, trimsd)
@@ -224,7 +179,7 @@ for iVoxel = 1:size(allDataAtBetas, 2),
     if trimsd > 0,
         allDataAtBetas(:, iVoxel) = trimts(allDataAtBetas(:, iVoxel), trimsd);
     end
-    Cout{1}(iVoxel) = corr(meanROI', allDataAtBetas(:, iVoxel), 'type', 'Pearson');
+    Cout{1}(iVoxel) = corr(meanROI, allDataAtBetas(:, iVoxel), 'type', 'Pearson');
 end
 Cout{2} = atanh(Cout{1});
 stdZ = 1 / (length(V) - 3);
@@ -286,58 +241,6 @@ idx = find(abs(y) > sd*std(y));
 if ~isempty(idx),
     y(idx) = sign(y(idx)) * sd*std(y);
     ntrimmed = length(idx);
-end
-end
-
-%% Extract Coordinates of ROI
-function [index mat] = roi_find_index(ROI_loc, thresh)
-% FORMAT [index mat] = roi_find_index(ROI_loc, thresh)
-% Returns the XYZ address of voxels with values greater than threshold. 
-% By Dennis Thompson.
-% 
-%
-% ROI_loc:          String pointing to nifti image.
-% thresh:           Threshold value, defaults to zero. Double.
-
-if ~exist('thresh','var'),
-    thresh = 0;
-end
-
-data = nifti(ROI_loc);
-Y = double(data.dat);
-Y(isnan(Y)) = 0;
-index = [];
-for n = 1:size(Y,3)
-    % find values greater > thresh
-    [xx yy] = find(squeeze(Y(:,:,n)) > thresh);
-    if ~isempty(xx),
-        zz = ones(size(xx))*n;
-        index = [index,[xx';yy';zz']];
-    end
-end
-
-mat = data.mat;
-end
-
-%% Adjust Coordinates of ROI
-function funcXYZ = adjust_XYZ(XYZ, ROImat, V)
-% FORMAT funcXYZ = adjust_XYZ(XYZ, ROImat, V)
-% By Dennis Thompson.
-%
-%
-% XYZ:              Output from lss_roi_find_index.
-% ROImat:           Output from lss_roi_find_index.
-% V:                Header information of nifti file from spm_vol.
-
-XYZ(4,:) = 1;
-funcXYZ = cell(length(V));
-for n = 1:length(V),
-    if(iscell(V)),
-       tmp = inv(V{n}.mat) * (ROImat * XYZ);
-    else
-        tmp = inv(V(n).mat) * (ROImat * XYZ);
-    end
-    funcXYZ{n} = tmp(1:3,:);
 end
 end
 
