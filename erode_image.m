@@ -1,8 +1,16 @@
-function erode_image(filename, THR, ERODE)
-% FORMAT erode_image(filename, THR, ERODE)
+function outFilename = erode_image(filename, THR, ERODE)
+% FORMAT outFilename = erode_image(filename, THR, ERODE)
 % Adapted from the Conn toolbox's mask erosion code to threshold and erode
 % nifti images.
-% Modified from code by Alphonso Nieto-Castanon by Taylor Salo 140902
+%
+%
+% filename: Nifti image to be binarized and eroded. String.
+% THR:      Threshold to apply to file for binarization. Default is 0.5.
+%           Double.
+% ERODE:    Number of layers to erode. Default is 1. Double.
+%
+%
+% Modified by Taylor Salo 140902 from code written by Alphonso Nieto-Castanon
 
 if ~exist('THR', 'var')
     THR = 0.5;
@@ -34,6 +42,7 @@ idx1 = idx1(idxt);
 X1 = zeros(size(X0));
 X1(idx1) = 1;
 [fpath, ffile, fext] = fileparts(V0.fname);
-V0.fname = fullfile(fpath, ['e' ffile fext]);
+outFilename = fullfile(fpath, ['e' ffile fext]);
+V0.fname = outFilename;
 spm_write_vol(V0, X1);
 end
