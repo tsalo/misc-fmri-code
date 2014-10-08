@@ -24,7 +24,7 @@ for iSubj = 1:length(subjects)
     spmDir = [spmFolder subjects{iSubj} spmSubFolder];
     outDir = [outFolder subjects{iSubj} outSubFolder];
     
-    images = generate_spm_singletrial_newLSS(subjects{iSubj}, spmDir, outDir, ignoreConditions, settings);
-    newLSS_correlation(images, [spmDir '/SPM.mat'], rois, settings);
+    images = lssGenerateBetasSpm(subjects{iSubj}, spmDir, outDir, ignoreConditions, settings);
+    lssCorrelation(images, rois, settings);
 end
 hourToc(tStart);

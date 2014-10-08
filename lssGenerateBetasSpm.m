@@ -1,5 +1,5 @@
-function images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignoreConditions, settings)
-% FORMAT images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignoreConditions, settings)
+function images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions, settings)
+% FORMAT images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions, settings)
 % This function takes an existing first-level SPM.mat file uses it to
 % create one of two possible models: multi-regressor and multi-model.
 % The multi-regressor approach estimates a single model with all trials

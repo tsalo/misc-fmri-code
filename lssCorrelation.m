@@ -1,5 +1,5 @@
-function newLSS_correlation(images, rois, settings)
-% FORMAT newLSS_correlation(images, rois, settings)
+function lssCorrelation(images, rois, settings)
+% FORMAT lssCorrelation(images, rois, settings)
 % Takes cell array of 4D images and, for each image, extracts mean beta
 % series from masks and computes one of two forms of functional
 % connectivity: seed2voxel or roi2roi. In seed2voxel functional
