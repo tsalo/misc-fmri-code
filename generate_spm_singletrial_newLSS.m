@@ -12,8 +12,7 @@ function images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignor
 % LS-S approach described in Turner et al. 2012 NI.
 % This function is integrated with newLSS_correlation for beta-series
 % functional connectivity with the multi-model approach through
-% batch_newLSS. At some point it will be ensured that it also works with
-% the multi-regressor approach.
+% batch_newLSS.
 %
 %
 % Inputs:
@@ -40,13 +39,12 @@ function images = generate_spm_singletrial_newLSS(subject, spmDir, outDir, ignor
 %
 % Author: Maureen Ritchey, 10-2012
 % Modified by Taylor Salo (140806) according to adjustments suggested by
-% Jeanette Mumford. My focus was on LS-S, so Rissman kind of fell by the
-% wayside and I don't know if it still works. LS-S now matches Turner et
-% al. 2012 NI, where the design matrix basically matches the original
-% design matrix (for a given block), except for the single trial being
-% evaluated, which gets its own regressor. Also now you can ignore multiple
-% conditions. I also added some overwrite stuff so that it won't re-run
-% existing subjects if you don't want it to.
+% Jeanette Mumford. LS-S now matches Turner et al. 2012 NI, where the
+% design matrix basically matches the original design matrix (for a given
+% block), except for the single trial being evaluated, which gets its own
+% regressor. Also now you can ignore multiple conditions. I also added some
+% overwrite stuff so that it won't re-run existing subjects if you don't
+% want it to.
 
 %% MAIN CODE
 % Load pre-existing SPM file containing model information
@@ -87,17 +85,9 @@ if settings.model == 2
         covariates = SPM.Sess(iSess).C.C;
 
         for jCond = 1:length(SPM.Sess(iSess).U)
-            % Check for special condition names to ignore
-            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
-%                 if strcmp(ignoreConditions{1}, 'NONE')
-%                 else
-%                     fprintf('\nIgnoring conditions:\n')
-%                     for kCond = 1:length(ignoreConditions)
-%                         fprintf('\t\t%s\n', ignoreConditions{kCond});
-%                     end
-%                 end
-            % Otherwise set up a model for each individual trial
-            else
+            % As long as the current condition isn't an IgnoreCondition,
+            % set up a model for each individual trial.
+            if ~cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
                 for kCond = 1:length(SPM.Sess(iSess).U)
                     allOtherConds{kCond} = SPM.Sess(iSess).U(kCond).name{1};
                     allConds{kCond} = SPM.Sess(iSess).U(kCond).name{1};
@@ -130,10 +120,21 @@ if settings.model == 2
                         singleDuration = SPM.Sess(iSess).U(jCond).dur(kTrial);
                         [otherSameCondOnsets, index] = setdiff(SPM.Sess(iSess).U(jCond).ons, SPM.Sess(iSess).U(jCond).ons(kTrial));
                         otherSameCondDurations = SPM.Sess(iSess).U(jCond).dur(index);
-
-                        onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
-                        durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
-                        names = [names singleName otherSameCondName otherDiffCondNames];
+                        
+                        % This is basically a special case for conditions
+                        % with only one trial in that Session. Hopefully
+                        % you would ignore such conditions (since they're
+                        % hopefully error conditions or NRs), but if you
+                        % didn't the script would otherwise break here.
+                        if ~isempty(otherSameCondOnsets)
+                            onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
+                            durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
+                            names = [names singleName otherSameCondName otherDiffCondNames];
+                        else
+                            onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
+                            durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
+                            names = [names singleName otherSameCondName otherDiffCondNames];
+                        end
 
                         % Make trial directory
                         trialDir = [outDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
@@ -169,7 +170,6 @@ if settings.model == 2
                             clear matlabbatch
                             runBatches = 1;
                         else
-%                             fprintf('Exists: %s\n', [trialDir 'beta_0001.img']);
                             clear matlabbatch
                             runBatches = 0;
                         end

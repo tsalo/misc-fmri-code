@@ -1,5 +1,5 @@
-function newLSS_correlation(images, spmFile, rois, settings)
-% FORMAT newLSS_correlation(images, spmFile, rois, settings)
+function newLSS_correlation(images, rois, settings)
+% FORMAT newLSS_correlation(images, rois, settings)
 % Takes cell array of 4D images and, for each image, extracts mean beta
 % series from masks and computes one of two forms of functional
 % connectivity: seed2voxel or roi2roi. In seed2voxel functional
@@ -17,8 +17,6 @@ function newLSS_correlation(images, spmFile, rois, settings)
 % images:             Cell array of 4D images from
 %                     generate_spm_singletrial_newLSS in format
 %                     images{conds}{sessImages}
-% spmFile:            Path to first level SPM.mat file from which LSS was
-%                     performed. String.
 % rois:               Cell array of paths to masks from which beta series
 %                     will be extracted. For seed2voxel connectivity this
 %                     beta series will be correlated with each of the 
@@ -31,7 +29,7 @@ function newLSS_correlation(images, spmFile, rois, settings)
 %                     String.
 % settings.overwrite: Overwrite any pre-existing files (1) or not (0).
 %                     Double.
-switch settings.fConnType
+switch settings.fConnType    
     case 'seed2voxel'
         imageDir = fileparts(images{1}{1});
         parDir = fileparts(imageDir);
@@ -39,8 +37,6 @@ switch settings.fConnType
         if ~exist(outDir, 'dir')
             mkdir(outDir);
         end
-        
-        load(spmFile);
         
         for iCond = 1:length(images)
             for jSess = 1:length(images{iCond})
@@ -59,13 +55,21 @@ switch settings.fConnType
                     
                     if settings.overwrite || ~exist(corrFilename{3}, 'file')
                         % Correlate rest of brain with extracted timeseries from mask (R, R_atahn, Z).
-                        allValsROI = spm_summarise(images{iCond}{jSess}, rois{kROI});
-                        meanROI = mean(allValsROI, 2);
-                        correlation = beta_series_corr(images{iCond}{jSess}, SPM, meanROI);
+                        meanRoi = extractBetaSeries(images{iCond}{jSess}, rois{kROI})';
+                        
+                        niiHeader = spm_vol(images{iCond}{jSess});
+                        [Y, ~] = spm_read_vols(niiHeader(1));
+                        nanIdx = find(~isnan(Y));
+                        [x, y, z] = ind2sub(size(Y), nanIdx);
+                        xVol.XYZ = [x y z].';
+                        xVol.DIM = size(Y);
+                        xVol.M = niiHeader.mat;
+                        
+                        correlation = correlateBetaSeries(niiHeader, xVol, meanRoi);
 
                         % Write correlation (data) to corrFilename (name of output file).
-                        write_corr_image(correlation{1}, corrFilename{1}, SPM.xVol);
-                        write_corr_image(correlation{3}, corrFilename{3}, SPM.xVol);
+                        writeCorrelationImage(correlation{1}, corrFilename{1}, xVol);
+                        writeCorrelationImage(correlation{3}, corrFilename{3}, xVol);
                     else
                         fprintf('Exists: %s\n', corrFilename{3});
                     end
@@ -77,7 +81,7 @@ switch settings.fConnType
                 if settings.overwrite || ~exist(outName, 'file')
                     % If there are multiple runs (i.e. LSS), create a mean file.
                     if length(zImages{iCond}{jROI}) > 1
-                        create_summary_image(zImages{iCond}{jROI}, outName, 'mean(X)');
+                        writeSummaryImage(zImages{iCond}{jROI}, outName, 'mean(X)');
                     end
                 else
                     fprintf('Exists: %s\n', outName);
@@ -92,8 +96,6 @@ switch settings.fConnType
             mkdir(outDir);
         end
         
-        load(spmFile);
-        
         for iCond = 1:length(images)
             for jSess = 1:length(images{iCond})
                 % Get rid of 4D from file name.
@@ -101,30 +103,33 @@ switch settings.fConnType
                 fileName = fileName(3:end);
                 
                 % Create file names for condition outputs.
-                corrMatrixName = [outDir '/Zcorr' fileName '.mat'];
+                corrMatrixName{2} = [outDir '/Rcorr' fileName '.mat'];
+                corrMatrixName{2} = [outDir '/Zcorr' fileName '.mat'];
                 zImages{iCond}{jSess} = corrMatrixName;
 
                 if settings.overwrite || ~exist(corrMatrixName, 'file')
+                    rCorrMatrix = zeros(length(rois));
                     zCorrMatrix = zeros(length(rois));
                     roiNames = cell(length(rois), 1);
                     roiBetaSeries = cell(length(rois), 1);
                     for kROI = 1:length(rois)
                         % Get ROI name
                         [~, roiNames{kROI}] = fileparts(rois{kROI});
-                        betaSeries = spm_summarise(images{iCond}{jSess}, rois{kROI});
-                        roiBetaSeries{kROI} = mean(betaSeries, 2);
+                        roiBetaSeries{kROI} = extractBetaSeries(images{iCond}{jSess}, rois{kROI})';
                     end
                     nTrials = length(roiBetaSeries{1});
                     for kROI = 1:length(rois)
                         for mROI = 1:length(rois)
-                            rCorr = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
+                            rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
                             stdZ = 1 / (nTrials - 3);
-                            zCorrMatrix(kROI, mROI) = atanh(rCorr) / stdZ;
+                            zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / stdZ;
                         end
                     end
                     corrStruct.rois = roiNames;
+                    corrStruct.corrMatrix = rCorrMatrix;
+                    save(corrMatrixName{1}, 'corrStruct');
                     corrStruct.corrMatrix = zCorrMatrix;
-                    save(corrMatrixName, 'corrStruct'); 
+                    save(corrMatrixName{2}, 'corrStruct'); 
                 end
             end
             [outDir, fname] = fileparts(zImages{iCond}{1});
@@ -152,63 +157,110 @@ switch settings.fConnType
 end
 end
 
+%% Extract beta series
+function meanRoi = extractBetaSeries(niiLoc, roiLoc, trimStd)
+% FORMAT meanRoi = extract_beta_series(niiLoc, roiLoc, trimStd)
+% Extracts and returns mean beta series from 4D niiLoc within ROI.
+% Adapted from beta_series_correlation_nomars by Dennis Thompson
+% without Events information.
+% Calls spm_vol, roiFindIndex, adjustXyz, and spm_get_data.
+%
+%
+% niiLoc:           Path to LSS file (4D nifti) for particular condition. 
+%                   Contains data to be correlated. String.
+% roiLoc:           Path to mask file to be used. String.
+% trimStd:          The number of standard deviations to use if you wish 
+%                   the raw data to be Windsorized. Set to 0 if the raw 
+%                   data are to be used. LSS default is 3. Double.
+
+if ~exist('trimStd', 'var'), trimStd = 3; end
+threshold = 0; % Find mask values greater than this
+
+% Get header info for beta data.
+niiHeader = spm_vol(niiLoc);
+
+% Get ROI index and transform matrix.
+if exist(roiLoc, 'file')
+    [XYZ, ROImat] = roiFindIndex(roiLoc, threshold);
+else
+    error('Mask not found: %s\n', roiLoc);
+end
+
+% Generate XYZ locations for each beta image correcting for alignment
+% issues and preallocate meanRoi vector.
+betaXYZ = adjustXyz(XYZ, ROImat, niiHeader);
+meanRoi = zeros(1, length(betaXYZ));
+
+% Extract mean of ROI from each beta.
+for iBeta = 1:length(betaXYZ),
+    betasInRoi = spm_get_data(niiHeader(iBeta), betaXYZ{iBeta});
+    meanRoi(iBeta) = nanmean(betasInRoi(:));
+end
+
+clear betasInRoi
+
+if trimStd > 0,
+    meanRoi = trimTimeseries(meanRoi, trimStd);
+end
+end
+
 %% Create Correlation image
-function Cout = beta_series_corr(niiLoc, SPM, meanROI, trimsd)
-% FORMAT Cout = beta_series_corr(niiLoc, SPM, meanROI, trimsd)
-% Correlates meanROI beta series with beta series of all other voxels in
+function correlationMatrix = correlateBetaSeries(niiHeader, xVol, meanRoi, trimStd)
+% FORMAT correlationMatrix = correlateBetaSeries(niiHeader, xVol, meanRoi, trimStd)
+% Correlates meanRoi beta series with beta series of all other voxels in
 % brain. Converts resulting R matrix to Z matrix.
 % Adapted from beta_series_correlation_nomars by Dennis Thompson
 % without Events information.
 % Calls spm_vol and spm_get_data.
 %
 %
-% niiLoc:           Path to LSS file (4D nifti) for particular condition. 
+% niiHeader:        Header of LSS file (4D nifti) for particular condition. 
 %                   Contains data to be correlated. String.
-% SPM:              Loaded SPM variable from SPM.mat (first level from 
-%                   original directory). Structure.
-% meanROI:          Mean beta series correlated with all other voxels' beta
+% xVol:             Select information from LSS file. Structure.
+% meanRoi:          Mean beta series correlated with all other voxels' beta
 %                   series in brain. Double vector.
-% trimsd:           The number of standard deviations to use if you wish 
+% trimStd:          The number of standard deviations to use if you wish 
 %                   the raw data to be Windsorized. Set to 0 if the raw 
 %                   data are to be used. LSS default is 3. Double.
-if ~exist('trimsd', 'var'), trimsd = 3; end
-V = spm_vol(niiLoc);
-allDataAtBetas = spm_get_data(V, SPM.xVol.XYZ);
-Cout = cell(3); Cout{1} = zeros(1, size(allDataAtBetas, 2));
+
+if ~exist('trimStd', 'var'), trimStd = 3; end
+
+allDataAtBetas = spm_get_data(niiHeader, xVol.XYZ);
+correlationMatrix = cell(3); correlationMatrix{1} = zeros(1, size(allDataAtBetas, 2));
 for iVoxel = 1:size(allDataAtBetas, 2),
-    if trimsd > 0,
-        allDataAtBetas(:, iVoxel) = trimts(allDataAtBetas(:, iVoxel), trimsd);
+    if trimStd > 0,
+        allDataAtBetas(:, iVoxel) = trimTimeseries(allDataAtBetas(:, iVoxel), trimStd);
     end
-    Cout{1}(iVoxel) = corr(meanROI, allDataAtBetas(:, iVoxel), 'type', 'Pearson');
+    correlationMatrix{1}(iVoxel) = corr(meanRoi, allDataAtBetas(:, iVoxel), 'type', 'Pearson');
 end
-Cout{2} = atanh(Cout{1});
-stdZ = 1 / (length(V) - 3);
-Cout{3} = Cout{2} / stdZ;
+correlationMatrix{2} = atanh(correlationMatrix{1});
+stdZ = 1 / (length(niiHeader) - 3);
+correlationMatrix{3} = correlationMatrix{2} / stdZ;
 end
 
 %% Write Correlation Image
-function write_corr_image(Cout, imagename, xVol)
-% FORMAT write_corr_image(Cout, imagename, xVol)
+function writeCorrelationImage(correlationMatrix, outNiftiName, xVol)
+% FORMAT writeCorrelationImage(correlationMatrix, outNiftiName, xVol)
 % Writes out whole brain correlation data into a nifti image. Verbatim
 % Dennis Thompson's write_correlation_image.
 %
 %
-% Cout:             A vector containing the correlations.
-% imagename:        What the file is to be called, can include the full path.
-% xVol:             A sub set of the SPM data structure.
+% correlationMatrix:   A vector containing the correlations.
+% outNiftiName:        What the file is to be called, can include the full path.
+% xVol:                A sub set of the SPM data structure.
 
-nvoxels = size(xVol.XYZ, 2); % length of real data in brain - should match the length of Cout
+nvoxels = size(xVol.XYZ, 2); % length of real data in brain - should match the length of correlationMatrix
 corrData = NaN * ones(xVol.DIM(1), xVol.DIM(2), xVol.DIM(3)); % array of NaN size of brain volumne
 
 % replace NaN's with corr results
 for iVoxel = 1:nvoxels,
-    corrData(xVol.XYZ(1, iVoxel), xVol.XYZ(2, iVoxel), xVol.XYZ(3, iVoxel)) = Cout(iVoxel);
+    corrData(xVol.XYZ(1, iVoxel), xVol.XYZ(2, iVoxel), xVol.XYZ(3, iVoxel)) = correlationMatrix(iVoxel);
 end
 
-[pathstr, name, ext] = fileparts(imagename);
+[pathstr, name, ext] = fileparts(outNiftiName);
 
 % make nifti data structure see spm_vol - dt is [32 bit float, little endian]
-CorrIm = struct ('fname', [name, ext], ...
+corrIm = struct ('fname', [name, ext], ...
     'dim',        [xVol.DIM'], ...
     'dt',         [16, 0], ...
     'mat',        xVol.M, ...
@@ -218,15 +270,15 @@ CorrIm = struct ('fname', [name, ext], ...
 cwd = pwd;
 cd(pathstr);
 
-CorrIm = spm_create_vol(CorrIm, 'noopen');
-[~] = spm_write_vol(CorrIm, corrData);
+corrIm = spm_create_vol(corrIm, 'noopen');
+[~] = spm_write_vol(corrIm, corrData);
 
 cd(cwd);
 end
 
 %% Trim Timeseries
-function [y, ntrimmed] = trimts(y, sd)
-% FORMAT [y, ntrimmed] = trimts(y, sd)
+function [y, ntrimmed] = trimTimeseries(y, sd)
+% FORMAT [y, ntrimmed] = trimTimeseries(y, sd)
 % Windsorizes data y by number of standard deviations sd.
 % By Dennis Thompson.
 %
@@ -244,9 +296,61 @@ if ~isempty(idx),
 end
 end
 
+%% Extract Coordinates of ROI
+function [index, mat] = roiFindIndex(roiLoc, thresh)
+% FORMAT [index, mat] = roiFindIndex(roiLoc, thresh)
+% Returns the XYZ address of voxels with values greater than threshold. 
+% By Dennis Thompson.
+% 
+%
+% roiLoc:           String pointing to nifti image.
+% thresh:           Threshold value, defaults to zero. Double.
+
+if ~exist('thresh','var'),
+    thresh = 0;
+end
+
+data = nifti(roiLoc);
+Y = double(data.dat);
+Y(isnan(Y)) = 0;
+index = [];
+for n = 1:size(Y,3)
+    % find values greater > thresh
+    [xx, yy] = find(squeeze(Y(:,:,n)) > thresh);
+    if ~isempty(xx),
+        zz = ones(size(xx))*n;
+        index = [index [xx';yy';zz']];
+    end
+end
+
+mat = data.mat;
+end
+
+%% Adjust Coordinates of ROI
+function funcXyz = adjustXyz(xyz, ROImat, niiHeader)
+% FORMAT funcXyz = adjustXyz(xyz, ROImat, niiHeader)
+% By Dennis Thompson.
+%
+%
+% XYZ:              Output from roiFindIndex.
+% ROImat:           Output from roiFindIndex.
+% niiHeader:        Header information of nifti file from spm_vol.
+
+xyz(4,:) = 1;
+funcXyz = cell(length(niiHeader));
+for n = 1:length(niiHeader),
+    if(iscell(niiHeader)),
+       tmp = inv(niiHeader{n}.mat) * (ROImat * xyz);
+    else
+        tmp = inv(niiHeader(n).mat) * (ROImat * xyz);
+    end
+    funcXyz{n} = tmp(1:3,:);
+end
+end
+
 %% Write Out Mean Image
-function create_summary_image(cellVols, outName, expr)
-% FORMAT create_summary_image(cellVols, outName, expr)
+function writeSummaryImage(cellVols, outName, expr)
+% FORMAT writeSummaryImage(cellVols, outName, expr)
 % Calls spm_imcalc to perform calculations (sum, mean, std) on a cell array
 % of volumes to output one summary volume.
 %
