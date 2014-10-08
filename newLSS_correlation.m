@@ -105,11 +105,11 @@ switch settings.fConnType
                 fileName = strjoin(separatedFilename, '_');
                 
                 % Create file names for condition outputs.
-                corrMatrixName{2} = [outDir '/Rcorr' fileName '.mat'];
+                corrMatrixName{1} = [outDir '/Rcorr' fileName '.mat'];
                 corrMatrixName{2} = [outDir '/Zcorr' fileName '.mat'];
-                zImages{iCond}{jSess} = corrMatrixName;
+                zImages{iCond}{jSess} = corrMatrixName{2};
 
-                if settings.overwrite || ~exist(corrMatrixName, 'file')
+                if settings.overwrite || ~exist(corrMatrixName{2}, 'file')
                     rCorrMatrix = zeros(length(rois));
                     zCorrMatrix = zeros(length(rois));
                     roiNames = cell(length(rois), 1);
