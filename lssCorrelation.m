@@ -123,7 +123,7 @@ switch settings.fConnType
                     for kROI = 1:length(rois)
                         for mROI = 1:length(rois)
                             rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
-                            steZ = 1 / (nTrials - 3);
+                            steZ = 1 / sqrt(nTrials - 3);
                             zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
                         end
                     end
@@ -236,7 +236,7 @@ for iVoxel = 1:size(allBetasAcrossVolumes, 2),
     correlationMatrix{1}(iVoxel) = corr(meanRoi, allBetasAcrossVolumes(:, iVoxel), 'type', 'Pearson');
 end
 correlationMatrix{2} = atanh(correlationMatrix{1});
-steZ = 1 / (length(niiHeader) - 3);
+steZ = 1 / sqrt(length(niiHeader) - 3);
 correlationMatrix{3} = correlationMatrix{2} / steZ;
 end
 
