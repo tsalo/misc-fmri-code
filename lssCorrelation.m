@@ -31,12 +31,14 @@ function lssCorrelation(images, rois, settings)
 %                     Double.
 imageDir = fileparts(images{1}{1});
 parentDir = fileparts(imageDir);
-switch settings.fConnType    
+switch settings.fConnType
     case 'seed2voxel'
         outDir = [parentDir '/seed2voxel_correlations/'];
         if ~exist(outDir, 'dir')
             mkdir(outDir);
         end
+        
+        minVoxels = 20;
         
         for iCond = 1:length(images)
             for jSess = 1:length(images{iCond})
@@ -57,7 +59,7 @@ switch settings.fConnType
                     
                     if settings.overwrite || ~exist(corrFilename{3}, 'file')
                         % Correlate rest of brain with extracted timeseries from mask (R, R_atahn, Z).
-                        meanRoi = extractBetaSeries(images{iCond}{jSess}, rois{kROI})';
+                        meanRoi = extractBetaSeries(images{iCond}{jSess}, rois{kROI}, minVoxels)';
                         
                         niiHeader = spm_vol(images{iCond}{jSess});
                         [Y, ~] = spm_read_vols(niiHeader(1));
@@ -81,7 +83,9 @@ switch settings.fConnType
                 [outDir, fname] = fileparts(zImages{iCond}{jROI}{1});
                 outName = [outDir '/mean_' fname(1:end-8) '.nii'];
                 if settings.overwrite || ~exist(outName, 'file')
-                    % If there are multiple runs (i.e. LSS), create a mean file.
+                    % If there are multiple runs (i.e. LSS), create a mean
+                    % file. Or should I create a "mean" file even if there
+                    % aren't multiple runs, for the consistency?
                     if length(zImages{iCond}{jROI}) > 1
                         writeSummaryImage(zImages{iCond}{jROI}, outName, 'mean(X)');
                     end
@@ -95,6 +99,13 @@ switch settings.fConnType
         if ~exist(outDir, 'dir')
             mkdir(outDir);
         end
+        
+        % If there are NaNs in a given ROI at a given beta, we will simply
+        % average/correlate around them. However, if there are too many
+        % NaNs (and consequently too few real values), we need to flag that
+        % ROI and/or timepoint.
+        minVoxels = 20;
+        minTimepoints = 5;
         
         for iCond = 1:length(images)
             for jSess = 1:length(images{iCond})
@@ -110,24 +121,46 @@ switch settings.fConnType
                 zImages{iCond}{jSess} = corrMatrixName{2};
 
                 if settings.overwrite || ~exist(corrMatrixName{2}, 'file')
-                    rCorrMatrix = zeros(length(rois));
-                    zCorrMatrix = zeros(length(rois));
-                    roiNames = cell(length(rois), 1);
-                    roiBetaSeries = cell(length(rois), 1);
+                    % Preallocate matrices and cell arrays.
+                    rCorrMatrix = zeros(length(rois)); zCorrMatrix = zeros(length(rois));
+                    roiNames = cell(length(rois), 1); roiBetaSeries = cell(length(rois), 1);
+                    
+                    % Get ROI names
                     for kROI = 1:length(rois)
-                        % Get ROI name
                         [~, roiNames{kROI}] = fileparts(rois{kROI});
-                        roiBetaSeries{kROI} = extractBetaSeries(images{iCond}{jSess}, rois{kROI})';
+                        roiBetaSeries{kROI} = extractBetaSeries(images{iCond}{jSess}, rois{kROI}, minVoxels)';
                     end
+                    
+                    badRois = {};
                     nTrials = length(roiBetaSeries{1});
                     for kROI = 1:length(rois)
-                        for mROI = 1:length(rois)
-                            rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
-                            steZ = 1 / (nTrials - 3);
-                            zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
+                        kRoiValueTimepoints = find(~isnan(roiBetaSeries{kROI}));
+                        if length(kRoiValueTimepoints) >= minTimepoints
+                            for mROI = 1:length(rois)
+                                mRoiValueTimepoints = find(~isnan(roiBetaSeries{mROI}));
+                                bothRoiValueTimepoints = intersect(kRoiValueTimepoints, mRoiValueTimepoints);
+                                if length(bothRoiValueTimepoints) >= minTimepoints
+                                    pairwiseCorrelations = corrcoef(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'rows', 'complete');
+                                    rCorrMatrix(kROI, mROI) = pairwiseCorrelations(1, 2);
+                                else
+                                    rCorrMatrix(kROI, mROI) = NaN;
+                                end
+
+                                % corr(x, y, 'type', 'Pearson') will return NaN if any values of x or y is NaN.
+                                % corrcoef(x, y, 'rows', 'complete') works around NaNs and
+                                % only returns NaN if all (xi, yi) pairs contain a NaN.
+    %                             rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
+                                steZ = 1 / sqrt(nTrials - 3);
+                                zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
+                            end
+                        else
+                            badRois = unique([badRois roiNames{kROI}]);
+                            rCorrMatrix(kROI, 1:end) = NaN;
+                            zCorrMatrix(kROI, 1:end) = NaN;
                         end
                     end
                     corrStruct.rois = roiNames;
+                    corrStruct.badRois = badRois;
                     corrStruct.corrMatrix = rCorrMatrix;
                     save(corrMatrixName{1}, 'corrStruct');
                     corrStruct.corrMatrix = zCorrMatrix;
@@ -141,10 +174,17 @@ switch settings.fConnType
                 % If there are multiple runs (i.e. LSS), create a mean file.
                 if length(zImages{iCond}) > 1
                     allCorr = [];
+                    meanStruct.badrois = {};
                     for jSess = 1:length(images{iCond})
                         load(zImages{iCond}{jSess});
                         allCorr(:, :, jSess) = corrStruct.corrMatrix;
                         meanStruct.rois = corrStruct.rois;
+                        % This method of determining bad ROIs basically
+                        % considers an ROI bad if it's bad in ANY session
+                        % for that condition. It could be changed to ALL or
+                        % majority or something, but I don't know what's
+                        % best. -TS
+                        meanStruct.badrois = unique([meanStruct.badrois corrStruct.badrois]);
                         clear corrStruct
                     end
                     meanStruct.meanCorr = mean(allCorr, 3);
@@ -160,8 +200,8 @@ end
 end
 
 %% Extract beta series
-function meanRoi = extractBetaSeries(niiLoc, roiLoc, trimStd)
-% FORMAT meanRoi = extract_beta_series(niiLoc, roiLoc, trimStd)
+function meanRoi = extractBetaSeries(niiLoc, roiLoc, minVoxels, trimStd)
+% FORMAT meanRoi = extractBetaSeries(niiLoc, roiLoc, minVoxels, trimStd)
 % Extracts and returns mean beta series from 4D niiLoc within ROI.
 % Adapted from beta_series_correlation_nomars by Dennis Thompson
 % without Events information.
@@ -171,6 +211,9 @@ function meanRoi = extractBetaSeries(niiLoc, roiLoc, trimStd)
 % niiLoc:           Path to LSS file (4D nifti) for particular condition. 
 %                   Contains data to be correlated. String.
 % roiLoc:           Path to mask file to be used. String.
+% minVoxels:        The minimum number of voxels that must have real values
+%                   (not NaNs) to return a real mean. If below this
+%                   threshold, will return NaN.
 % trimStd:          The number of standard deviations to use if you wish 
 %                   the raw data to be Windsorized. Set to 0 if the raw 
 %                   data are to be used. LSS default is 3. Double.
@@ -190,13 +233,18 @@ end
 
 % Generate XYZ locations for each beta image correcting for alignment
 % issues and preallocate meanRoi vector.
-betaXYZ = adjustXyz(xyz, roiMatrix, niiHeader);
-meanRoi = zeros(1, length(betaXYZ));
+betaXyz = adjustXyz(xyz, roiMatrix, niiHeader);
+meanRoi = zeros(1, length(betaXyz));
 
 % Extract mean of ROI from each beta.
-for iBeta = 1:length(betaXYZ),
-    betasInRoi = spm_get_data(niiHeader(iBeta), betaXYZ{iBeta});
-    meanRoi(iBeta) = nanmean(betasInRoi(:));
+for iBeta = 1:length(betaXyz),
+    betasInRoi = spm_get_data(niiHeader(iBeta), betaXyz{iBeta});
+    nNotNans = sum(~isnan(betasInRoi(:)));
+    if nNotNans >= minVoxels
+        meanRoi(iBeta) = nanmean(betasInRoi(:));
+    else
+        meanRoi(iBeta) = NaN;
+    end
 end
 
 clear betasInRoi
@@ -236,7 +284,7 @@ for iVoxel = 1:size(allBetasAcrossVolumes, 2),
     correlationMatrix{1}(iVoxel) = corr(meanRoi, allBetasAcrossVolumes(:, iVoxel), 'type', 'Pearson');
 end
 correlationMatrix{2} = atanh(correlationMatrix{1});
-steZ = 1 / (length(niiHeader) - 3);
+steZ = 1 / sqrt(length(niiHeader) - 3);
 correlationMatrix{3} = correlationMatrix{2} / steZ;
 end
 
