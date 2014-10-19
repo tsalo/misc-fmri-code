@@ -5,4 +5,4 @@ pThr = {0.01 0.05};
 corr = {'unc' 'FWE'};
 k = 0;
 
-save_clusters_and_effect_size(spmFile, pThr, corr, k);
+saveClustersAndEffectSize(spmFile, pThr, corr, k);
