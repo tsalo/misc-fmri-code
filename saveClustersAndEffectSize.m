@@ -1,5 +1,5 @@
-function save_clusters_and_effect_size(spmFile, pThr, corr, k)
-% FORMAT save_clusters_and_effect_size(spmFile, pThr, corr, k)
+function saveClustersAndEffectSize(spmFile, pThr, corr, k)
+% FORMAT saveClustersAndEffectSize(spmFile, pThr, corr, k)
 % Loops through T contrasts in SPM second-level analysis, thresholding spmT
 % image based on pThr, corr, and k, and saving a mask of each cluster in
 % subdirectory. Also creates a Cohen's d image for each T contrast and
