@@ -83,7 +83,8 @@ if settings.model == 2
         sessFiles = files(rows', :);
         sessFiles = cellstr(sessFiles);
         covariates = SPM.Sess(iSess).C.C;
-
+        allConds = {};
+        
         for jCond = 1:length(SPM.Sess(iSess).U)
             % As long as the current condition isn't an IgnoreCondition,
             % set up a model for each individual trial.
@@ -94,6 +95,8 @@ if settings.model == 2
                 end
                 allOtherConds(jCond) = [];
                 otherDiffCondNames = allOtherConds;
+                otherDiffCondOnsets = cell(1, length(otherDiffCondNames));
+                otherDiffCondDurations = cell(1, length(otherDiffCondNames));
                 
                 for jjCond = 1:length(SPM.Sess(iSess).U)
                     if jCond ~= jjCond
@@ -183,8 +186,8 @@ if settings.model == 2
                             clear matlabbatch
 
                             % Copy first beta image to beta directory
-                            copyfile([trialDir 'beta_0001.img'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
-                            copyfile([trialDir 'beta_0001.hdr'],[betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
+                            system(['cp ' trialDir 'beta_0001.img ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
+                            system(['cp ' trialDir 'beta_0001.hdr ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
 
                             % Discard extra files, if desired
                             if settings.deleteFiles
