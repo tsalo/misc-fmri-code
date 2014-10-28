@@ -84,6 +84,7 @@ if settings.model == 2
         sessFiles = cellstr(sessFiles);
         covariates = SPM.Sess(iSess).C.C;
         allConds = {};
+        allOtherConds = {};
         
         for jCond = 1:length(SPM.Sess(iSess).U)
             % As long as the current condition isn't an IgnoreCondition,
