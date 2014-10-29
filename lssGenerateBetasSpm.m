@@ -128,16 +128,16 @@ if settings.model == 2
                         % This is basically a special case for conditions
                         % with only one trial in that Session. Hopefully
                         % you would ignore such conditions (since they're
-                        % hopefully error conditions or NRs), but if you
+                        % probably error conditions or NRs), but if you
                         % didn't the script would otherwise break here.
                         if ~isempty(otherSameCondOnsets)
                             onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
                             durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
                             names = [names singleName otherSameCondName otherDiffCondNames];
                         else
-                            onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
-                            durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
-                            names = [names singleName otherSameCondName otherDiffCondNames];
+                            onsets = [onsets singleOnset otherDiffCondOnsets];
+                            durations = [durations singleDuration otherDiffCondDurations];
+                            names = [names singleName otherDiffCondNames];
                         end
 
                         % Make trial directory
