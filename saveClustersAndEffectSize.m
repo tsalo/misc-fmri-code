@@ -236,6 +236,7 @@ for iCon = 1:length(SPM.xCon)
         clear x y z XYZ
         
         clustHeader = VspmT;
+        allClustHeader = VspmT;
         rawData = spm_read_vols(VspmT);
         [allClustVals, nClusters] = spm_bwlabel(double(rawData > xSPM.u), 18);
 
@@ -263,7 +264,16 @@ for iCon = 1:length(SPM.xCon)
                     clustPeakMM = peakMM;
                 end
             end
+            
+            % Skip clusters not found in the table (because they're not
+            % significant). Only skips clusters if cluster-extent
+            % thresholding was used.
             if clustNumber ~= 0
+                if ~exist('allClustMask', 'var')
+                    allClustMask = oneClustVals;
+                else
+                    allClustMask = allClustMask + oneClustVals;
+                end
                 peakCoord = table{clustIdx(clustNumber), 10}.';
                 clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
                 spm_write_vol(clustHeader, oneClustVals);
@@ -314,6 +324,14 @@ for iCon = 1:length(SPM.xCon)
                     outStruct{zCol}.col{mSubClust, 1} = table{mSubClust, 10}(3);
                 end
             end
+        end
+        if exist('allClustMask', 'var')
+            allSignificantClusterValues = rawData .* allClustMask;
+            allClustHeader.fname = [outDir 'allClusterMask.nii'];
+            spm_write_vol(allClustHeader, allClustMask);
+            clear allClustMask
+            allClustHeader.fname = [outDir 'allClusterVals.nii'];
+            spm_write_vol(allClustHeader, allSignificantClusterValues);
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustIdx), nClusters, k);
