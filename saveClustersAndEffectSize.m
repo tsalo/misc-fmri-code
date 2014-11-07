@@ -133,12 +133,12 @@ for iCon = 1:length(SPM.xCon)
 
         % Create Cohen's D image.
         VspmT = spm_vol(spmT);
-        [Tvals, ~] = spm_read_vols(VspmT);
-        Dvals = (2 .* Tvals) ./ sqrt(xSPM.df(2));
-        dHeader = VspmT;
-        dHeader.fname = [outDir 'D_' conName '.nii'];
-        outDHeader = spm_create_vol(dHeader);
-        spm_write_vol(outDHeader, Dvals(:, :, :));
+        [contrastTValues, ~] = spm_read_vols(VspmT);
+        Dvals = (2 .* contrastTValues) ./ sqrt(xSPM.df(2));
+        dFileHeader = VspmT;
+        dFileHeader.fname = [outDir 'D_' conName '.nii'];
+        outDFileHeader = spm_create_vol(dFileHeader);
+        spm_write_vol(outDFileHeader, Dvals(:, :, :));
 
         % Determine voxel size of T image.
         [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
@@ -169,7 +169,7 @@ for iCon = 1:length(SPM.xCon)
                 error('Variable corr must be either "unc", "FWE", or "FDR".');
         end
         
-        [x, y, z] = ind2sub(size(Tvals), find(Tvals > xSPM.u));
+        [x, y, z] = ind2sub(size(contrastTValues), find(contrastTValues > xSPM.u));
         XYZ = [x'; y'; z'];
         Z = min(Inf, spm_get_data(SPM.xCon(iCon).Vspm, XYZ));
 
@@ -235,8 +235,8 @@ for iCon = 1:length(SPM.xCon)
                 
         clear x y z XYZ
         
-        clustHeader = VspmT;
-        allClustHeader = VspmT;
+        clusterFileHeader = VspmT;
+        allClustersFileHeader = VspmT;
         rawData = spm_read_vols(VspmT);
         [allClustVals, nClusters] = spm_bwlabel(double(rawData > xSPM.u), 18);
 
@@ -248,8 +248,8 @@ for iCon = 1:length(SPM.xCon)
             oneClustVals = zeros(size(allClustVals));
             oneClustVals(allClustVals == clustNum(jClust)) = 1;
             [x, y, z] = ind2sub(size(oneClustVals), find(oneClustVals == 1));
-            clustXYZ = [x'; y'; z'];
-            adjClustXYZ = adjust_XYZ(clustXYZ, clustHeader.mat, dHeader);
+            clusterCoordinates = [x'; y'; z'];
+            adjustedclusterCoordinates = adjustXyz(clusterCoordinates, clusterFileHeader.mat, dFileHeader);
             clustNumber = 0;
             
             % Determine which cluster you're looking at and fill in that
@@ -259,7 +259,7 @@ for iCon = 1:length(SPM.xCon)
             % size.
             for kClust = 1:length(clustIdx)
                 peakMM(1:3) = (table{clustIdx(kClust), 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-                if sum(ismember(adjClustXYZ{1}.', peakMM, 'rows'))
+                if sum(ismember(adjustedclusterCoordinates{1}.', peakMM, 'rows'))
                     clustNumber = kClust;
                     clustPeakMM = peakMM;
                 end
@@ -275,8 +275,8 @@ for iCon = 1:length(SPM.xCon)
                     allClustMask = allClustMask + oneClustVals;
                 end
                 peakCoord = table{clustIdx(clustNumber), 10}.';
-                clustHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
-                spm_write_vol(clustHeader, oneClustVals);
+                clusterFileHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
+                spm_write_vol(clusterFileHeader, oneClustVals);
                 
                 % Fill in output csv.
                 outStruct{roaCol}.col{clustIdx(clustNumber), 1} = '';
@@ -327,11 +327,11 @@ for iCon = 1:length(SPM.xCon)
         end
         if exist('allClustMask', 'var')
             allSignificantClusterValues = rawData .* allClustMask;
-            allClustHeader.fname = [outDir 'allClusterMask.nii'];
-            spm_write_vol(allClustHeader, allClustMask);
+            allClustersFileHeader.fname = [outDir 'allClusterMask.nii'];
+            spm_write_vol(allClustersFileHeader, allClustMask);
             clear allClustMask
-            allClustHeader.fname = [outDir 'allClusterVals.nii'];
-            spm_write_vol(allClustHeader, allSignificantClusterValues);
+            allClustersFileHeader.fname = [outDir 'allClusterVals.nii'];
+            spm_write_vol(allClustersFileHeader, allSignificantClusterValues);
         end
 
         fprintf('\t\t%d out of %d clusters are larger than %d voxels.\n', length(clustIdx), nClusters, k);
@@ -368,8 +368,8 @@ sizeZ = pdist([mniO; mniZ], 'euclidean');
 end
 
 %% Adjust Coordinates of ROI
-function funcXYZ = adjust_XYZ(XYZ, ROImat, V)
-% FORMAT funcXYZ = adjust_XYZ(XYZ, ROImat, V)
+function funcXYZ = adjustXyz(XYZ, ROImat, V)
+% FORMAT funcXYZ = adjustXyz(XYZ, ROImat, V)
 % By Dennis Thompson.
 %
 %
