@@ -134,14 +134,14 @@ for iCon = 1:length(SPM.xCon)
         % Create Cohen's D image.
         VspmT = spm_vol(spmT);
         [contrastTValues, ~] = spm_read_vols(VspmT);
-        Dvals = (2 .* contrastTValues) ./ sqrt(xSPM.df(2));
+        dValues = (2 .* contrastTValues) ./ sqrt(xSPM.df(2));
         dFileHeader = VspmT;
         dFileHeader.fname = [outDir 'D_' conName '.nii'];
         outDFileHeader = spm_create_vol(dFileHeader);
-        spm_write_vol(outDFileHeader, Dvals(:, :, :));
+        spm_write_vol(outDFileHeader, dValues(:, :, :));
 
         % Determine voxel size of T image.
-        [sizeX, sizeY, sizeZ] = get_voxel_size(spmT);
+        [sizeX, sizeY, sizeZ] = getVoxelSize(spmT);
         voxelScalar = sizeX * sizeY * sizeZ;
         xSPM.VOX = [sizeX sizeY sizeZ];
         xSPM.units = {'mm' 'mm' 'mm'};
@@ -292,7 +292,7 @@ for iCon = 1:length(SPM.xCon)
                 
                 outStruct{kCol}.col{clustIdx(clustNumber), 1} = clustSize(jClust) * voxelScalar;
                 outStruct{tCol}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
-                outStruct{dCol}.col{clustIdx(clustNumber), 1} = Dvals(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
+                outStruct{dCol}.col{clustIdx(clustNumber), 1} = dValues(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
                 outStruct{xCol}.col{clustIdx(clustNumber), 1} = peakCoord(1);
                 outStruct{yCol}.col{clustIdx(clustNumber), 1} = peakCoord(2);
                 outStruct{zCol}.col{clustIdx(clustNumber), 1} = peakCoord(3);
@@ -318,7 +318,7 @@ for iCon = 1:length(SPM.xCon)
                     outStruct{kCol}.col{mSubClust, 1} = '';
                     outStruct{tCol}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
                     subPeakMM = (table{mSubClust, 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-                    outStruct{dCol}.col{mSubClust, 1} = Dvals(subPeakMM(1), subPeakMM(2), subPeakMM(3));
+                    outStruct{dCol}.col{mSubClust, 1} = dValues(subPeakMM(1), subPeakMM(2), subPeakMM(3));
                     outStruct{xCol}.col{mSubClust, 1} = table{mSubClust, 10}(1);
                     outStruct{yCol}.col{mSubClust, 1} = table{mSubClust, 10}(2);
                     outStruct{zCol}.col{mSubClust, 1} = table{mSubClust, 10}(3);
@@ -345,8 +345,8 @@ fprintf('Done.\n\n');
 end
 
 %% Determine Voxel Size in Nifti File
-function [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
-% FORMAT [sizeX, sizeY, sizeZ] = get_voxel_size(niiFile)
+function [sizeX, sizeY, sizeZ] = getVoxelSize(niiFile)
+% FORMAT [sizeX, sizeY, sizeZ] = getVoxelSize(niiFile)
 % Determines size of voxel in X, Y, and Z dimensions. This assumes that the
 % matrix is not diagonal, but works fine if it is.
 %
