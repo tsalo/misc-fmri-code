@@ -10,6 +10,7 @@ import sys
 import os.path
 import nibabel as nb
 import numpy as np
+import scipy.io
 
 
 def main(nifti_image, mask_image=""):
@@ -30,7 +31,7 @@ def main(nifti_image, mask_image=""):
 
         if mask_shape == nii_shape:
             mask_index = np.where(mask_img.get_data())
-            if (mask_affine == nii_affine).all():
+            if ~(mask_affine == nii_affine).all():
                 print("Affine matrices don't match up! " +
                       "Mask index must be adjusted.")
                 zero_row = np.zeros(len(mask_index[0]))
@@ -50,6 +51,36 @@ def main(nifti_image, mask_image=""):
     else:
         nanmasked_nii = np.ma.masked_array(nii_vals, np.isnan(nii_vals))
         return nanmasked_nii.mean()
+
+
+def str2bool(string):
+    return string.lower() in ("yes", "true", "t", "1", "y")
+
+
+def determine_spm_contrasts(spm_file):
+    mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
+    spm = mat["SPM"]
+    contrast_names = []
+    contrast_files = []
+    for i, i_con in enumerate(spm.xCon):
+        contrast_names.append(str(i_con.name))
+        contrast_files.append(str(i_con.Vspm.fname))
+        print("%s\t%s" % (str(i), str(i_con.name)))
+
+    sure = False
+    while not sure:
+        wanted_contrasts = input("Contrast list: ")
+        sure = str2bool(input("You sure (yes/no)? "))
+    return wanted_contrasts
+
+
+def determine_contrast_file(spm_file, contrast_name):
+    mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
+    spm = mat["SPM"]
+    for i_con in spm.xCon:
+        if contrast_name == str(i_con.name):
+            return str(i_con.Vspm.fname)
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
