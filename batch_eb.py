@@ -21,7 +21,7 @@ file_sup_path = "/nfs/ep2/AX/first_levels/00_MONTH/"
 file_sub_path = "/MTU/func_an_SPM8/"
 file_name = "con_0001.img"
 mask_file = "/nfs/ep2/masks/PickAtlas/B46_L_d0.nii"
-groups = ["HC", "SZ", "BP"]
+group_list = ["HC", "SZ", "BP"]
 
 subjects = []
 
@@ -37,11 +37,18 @@ wanted_contrasts = eb.determine_spm_contrasts(file_sup_path + subjects[0][1] +
 
 headers = ["ID", "Group"] + wanted_contrasts
 out_struct = pd.DataFrame(columns=headers)
-for i_group in subjects:
-    if i_group[0] in groups:
-        for j in range(1, len(i_group)):
-            
-            beta_file = file_sup_path + i_group[j] + file_sub_path + file_name
-            beta_value = eb.main(beta_file, mask_file)
-            betas = [beta_value]
-            out_struct.loc[len(out_struct)] = [i_group[j], i_group[0]] + betas
+for groups in subjects:
+    if groups[0] in group_list:
+        for j_subj in range(1, len(groups)):
+            beta_values = []
+            wanted_file_list = eb.determine_contrast_files(file_sup_path +
+                                                           subjects[0][1] +
+                                                           file_sub_path +
+                                                           "SPM.mat",
+                                                           wanted_contrasts)
+            for k_con, contrast in enumerate(wanted_contrasts):
+                beta_file = (file_sup_path + groups[j_subj] + file_sub_path +
+                             wanted_file_list[k_con])
+                beta_value = eb.main(beta_file, mask_file)
+                beta_values.append(beta_value)
+            out_struct.loc[len(out_struct)] = [groups[j_subj], groups[0]] + beta_values

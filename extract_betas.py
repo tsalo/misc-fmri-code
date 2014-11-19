@@ -13,7 +13,7 @@ import numpy as np
 import scipy.io
 
 
-def main(nifti_image, mask_image=""):
+def main(nifti_image, mask_image):
     if os.path.isfile(nifti_image):
         nii_img = nb.load(nifti_image)
         nii_vals = np.array(nii_img.get_data())
@@ -21,7 +21,8 @@ def main(nifti_image, mask_image=""):
         nii_shape = nii_header.get_data_shape()
         nii_affine = nii_header.get_qform()
     else:
-        raise ValueError("Variable nifti_image points to non-existent file.")
+        print("Variable nifti_image points to non-existent file.")
+        return ""
 
     if os.path.isfile(mask_image):
         mask_img = nb.load(mask_image)
@@ -46,15 +47,26 @@ def main(nifti_image, mask_image=""):
             raise ValueError("Mask and nifti image are " +
                              "different shapes/sizes.")
         return nanmasked_nii.mean()
-    elif mask_image:
-        raise ValueError("Variable mask_image points to non-existent file.")
     else:
-        nanmasked_nii = np.ma.masked_array(nii_vals, np.isnan(nii_vals))
-        return nanmasked_nii.mean()
+        raise ValueError("Variable mask_image points to non-existent file.")
 
 
 def str2bool(string):
+    """
+    Returns boolean value based on string. True strings include 'yes', 'true',
+    't', '1', and 'y', along with any of their case variations.
+    """
     return string.lower() in ("yes", "true", "t", "1", "y")
+
+
+def _try_index(list_, val):
+    """
+    Indexes a list without throwing an error if the value isn't found.
+    """
+    try:
+        return list_.index(val)
+    except:
+        return False
 
 
 def determine_spm_contrasts(spm_file):
@@ -74,12 +86,15 @@ def determine_spm_contrasts(spm_file):
     return wanted_contrasts
 
 
-def determine_contrast_file(spm_file, contrast_name):
+def determine_contrast_files(spm_file, contrast_list):
     mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
     spm = mat["SPM"]
-    for i_con in spm.xCon:
-        if contrast_name == str(i_con.name):
-            return str(i_con.Vspm.fname)
+    full_file_list = [str(i_con.Vspm.fname) for i_con in spm.xCon]
+    full_contrast_list = [str(i_con.name) for i_con in spm.xCon]
+    contrast_index = [_try_index(full_contrast_list, contrast) for contrast in
+                      contrast_list]
+    file_list = [full_file_list[index] for index in contrast_index]
+    return file_list
 
 
 if __name__ == "__main__":
