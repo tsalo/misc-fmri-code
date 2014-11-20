@@ -81,15 +81,16 @@ def determine_spm_contrasts(spm_file):
 
     sure = False
     while not sure:
-        wanted_contrasts = input("Contrast list: ")
+        wanted_index = input("Contrast list: ")
         sure = str2bool(input("You sure (yes/no)? "))
+    wanted_contrasts = [contrast_names[i] for i in wanted_index]
     return wanted_contrasts
 
 
 def determine_contrast_files(spm_file, contrast_list):
     mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
     spm = mat["SPM"]
-    full_file_list = [str(i_con.Vspm.fname) for i_con in spm.xCon]
+    full_file_list = [str(i_con.Vcon.fname) for i_con in spm.xCon]
     full_contrast_list = [str(i_con.name) for i_con in spm.xCon]
     contrast_index = [_try_index(full_contrast_list, contrast) for contrast in
                       contrast_list]

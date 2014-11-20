@@ -8,6 +8,7 @@ Summarizes betas and calls extract_betas.
 import csv
 import extract_betas as eb
 import pandas as pd
+import numpy as np
 
 
 def transpose_list_of_lists(list_):
@@ -42,13 +43,22 @@ for groups in subjects:
         for j_subj in range(1, len(groups)):
             beta_values = []
             wanted_file_list = eb.determine_contrast_files(file_sup_path +
-                                                           subjects[0][1] +
+                                                           groups[j_subj] +
                                                            file_sub_path +
                                                            "SPM.mat",
                                                            wanted_contrasts)
             for k_con, contrast in enumerate(wanted_contrasts):
                 beta_file = (file_sup_path + groups[j_subj] + file_sub_path +
                              wanted_file_list[k_con])
+                print(beta_file)
                 beta_value = eb.main(beta_file, mask_file)
                 beta_values.append(beta_value)
-            out_struct.loc[len(out_struct)] = [groups[j_subj], groups[0]] + beta_values
+            out_struct.loc[len(out_struct)] = ([groups[j_subj], groups[0]] +
+                                               beta_values)
+
+grouped = out_struct.groupby('Group')
+for con in wanted_contrasts:
+    out_struct[con] = out_struct[con].astype(float)
+
+mean_ = grouped.aggregate(lambda x: np.mean(x))
+ste_ = grouped.aggregate(lambda x: np.std(x) / np.sqrt(x.count()))
