@@ -12,6 +12,12 @@ import nibabel as nb
 import numpy as np
 import scipy.io
 
+global yes, y, no, n
+yes = "yes"
+y = "yes"
+no = "no"
+n = "no"
+
 
 def main(nifti_image, mask_image):
     if os.path.isfile(nifti_image):
@@ -69,7 +75,7 @@ def _try_index(list_, val):
         return False
 
 
-def determine_spm_contrasts(spm_file):
+def get_spm_contrast_list(spm_file):
     mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
     spm = mat["SPM"]
     contrast_names = []
@@ -87,7 +93,7 @@ def determine_spm_contrasts(spm_file):
     return wanted_contrasts
 
 
-def determine_contrast_files(spm_file, contrast_list):
+def get_spm_contrast_files(spm_file, contrast_list):
     mat = scipy.io.loadmat(spm_file, squeeze_me=True, struct_as_record=False)
     spm = mat["SPM"]
     full_file_list = [str(i_con.Vcon.fname) for i_con in spm.xCon]
@@ -96,6 +102,16 @@ def determine_contrast_files(spm_file, contrast_list):
                       contrast_list]
     file_list = [full_file_list[index] for index in contrast_index]
     return file_list
+
+
+def get_fsl_contrast_list(design_file):
+    print("Just kidding! I don't know how to do this yet. " +
+          "But it's on the to-do list!")
+
+
+def get_fsl_contrast_files(design_file, contrast_list):
+    print("Just kidding! I don't know how to do this yet. " +
+          "But it's on the to-do list!")
 
 
 if __name__ == "__main__":
