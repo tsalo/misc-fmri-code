@@ -1,5 +1,5 @@
-function images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions, settings)
-% FORMAT images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions, settings)
+function images = lssGenerateBetasSpm(subject, spmDir, outDir, includeConditions, settings)
+% FORMAT images = lssGenerateBetasSpm(subject, spmDir, outDir, includeConditions, settings)
 % This function takes an existing first-level SPM.mat file uses it to
 % create one of two possible models: multi-regressor and multi-model.
 % The multi-regressor approach estimates a single model with all trials
@@ -37,9 +37,9 @@ function images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions,
 % Requirements: SPM8, cellstrfind (Matlab function written by Taylor Salo)
 %               
 %
-% Author: Maureen Ritchey, 10-2012
-% Modified by Taylor Salo (140806) according to adjustments suggested by
-% Jeanette Mumford. LS-S now matches Turner et al. 2012 NI, where the
+% Created by Maureen Ritchey 121010
+% Modified by Taylor Salo 140806-141216 according to adjustments suggested 
+% by Jeanette Mumford. LS-S now matches Turner et al. 2012 NI, where the
 % design matrix basically matches the original design matrix (for a given
 % block), except for the single trial being evaluated, which gets its own
 % regressor. Also now you can ignore multiple conditions. I also added some
@@ -51,7 +51,6 @@ function images = lssGenerateBetasSpm(subject, spmDir, outDir, ignoreConditions,
 fprintf('\nLoading previous model for %s:\n%s\n', subject, [spmDir, '/SPM.mat']);
 if exist([spmDir '/SPM.mat'],'file')
     load([spmDir '/SPM.mat'])
-    SPM_orig = SPM;
 else
     error('Cannot find SPM.mat file.');
 end
@@ -60,6 +59,9 @@ if ~exist(outDir, 'dir')
     fprintf('\nCreating directory:\n%s\n', outDir);
     mkdir(outDir)
 end
+
+temporaryRootFolder = ['/run/shm/' getenv('USER') '/'];
+tempDir = [temporaryRootFolder subject '/'];
 
 % Get model information from SPM file
 fprintf('\nGetting model information...\n');
@@ -73,130 +75,126 @@ end
 
 % MULTI-MODEL APPROACH
 if settings.model == 2
-    % Set up beta information
-    trialInfo = {'beta_number' 'session' 'condition' 'condition_rep' 'number_onsets' 'beta_name' 'trial_dir' 'beta_name'};
     counter = 1;
+    
+    if settings.useTempFS
+        [nRows, nCols] = size(files);
+        index = 1:nCols;
+        for iRow = 1:nRows
+            index = intersect(index, find(SPM.xY.P(1, :) == SPM.xY.P(iRow, :)));
+        end
 
+        indexDiff = diff(index)==1;
+        consecutiveIndex = find([false, indexDiff]~=[indexDiff, false]);
+        lastConsecutive = consecutiveIndex(2:2:end);
+        newFiles = cellstr(files);
+        
+        for iFile = 1:nRows
+            oldPath = fileparts(files(iFile, 1:lastConsecutive));
+            newFile = strrep(files(iFile, :), oldPath, tempDir);
+            newFiles{iFile} = newFile;
+            newDataDir = fileparts(newFile);
+            if ~exist(newDataDir, 'dir')
+                mkdir(newDataDir);
+            end
+            system(['cp ' files(iFile, 1:end-2) ' ' newFile(1:end-2)]);
+        end
+    end
+    
     % Loop across sessions
     for iSess = 1:length(SPM.Sess)
         rows = SPM.Sess(iSess).row;
-        sessFiles = files(rows', :);
-        sessFiles = cellstr(sessFiles);
+        if settings.useTempFS
+            sessFiles = newFiles(rows);
+        else
+            sessFiles = files(rows', :);
+            sessFiles = cellstr(sessFiles);
+        end
         covariates = SPM.Sess(iSess).C.C;
-        allConds = {};
-        allOtherConds = {};
-        
+        originalNames = cell(1, length(SPM.Sess(iSess).U));
+        originalOnsets = cell(1, length(SPM.Sess(iSess).U));
+        originalDurations = cell(1, length(SPM.Sess(iSess).U));
         for jCond = 1:length(SPM.Sess(iSess).U)
-            % As long as the current condition isn't an IgnoreCondition,
-            % set up a model for each individual trial.
-            if ~cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
-                for kCond = 1:length(SPM.Sess(iSess).U)
-                    allOtherConds{kCond} = SPM.Sess(iSess).U(kCond).name{1};
-                    allConds{kCond} = SPM.Sess(iSess).U(kCond).name{1};
-                end
-                allOtherConds(jCond) = [];
-                otherDiffCondNames = allOtherConds;
-                otherDiffCondOnsets = cell(1, length(otherDiffCondNames));
-                otherDiffCondDurations = cell(1, length(otherDiffCondNames));
-                
-                for jjCond = 1:length(SPM.Sess(iSess).U)
-                    if jCond ~= jjCond
-                        for jjjCond = 1:length(allOtherConds)
-                            if strcmp(SPM.Sess(iSess).U(jjCond).name{1}, allOtherConds{jjjCond})
-                                otherDiffCondOnsets{jjjCond} = SPM.Sess(iSess).U(jjCond).ons;
-                                otherDiffCondDurations{jjjCond} = SPM.Sess(iSess).U(jjCond).dur;
-                            end
-                        end
+            originalNames{jCond} = SPM.Sess(iSess).U(jCond).name{1};
+            originalOnsets{jCond} = SPM.Sess(iSess).U(jCond).ons;
+            originalDurations{jCond} = SPM.Sess(iSess).U(jCond).dur;
+        end
+        [lssNames, lssOnsets, lssDurations] = lssMakeVectors(originalNames, originalOnsets, originalDurations, includeConditions);
+        
+        for jCond = 1:length(includeConditions)
+            if settings.overwrite || ~exist([betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
+                % As long as the current condition is in includeConditions,
+                % set up a model for each individual trial.
+                for kTrial = 1:length(lssOnsets{jCond})
+                    singleName = lssNames{jCond}{kTrial}{1};
+                    names = lssNames{jCond}{kTrial};
+                    onsets = lssOnsets{jCond}{kTrial};
+                    durations = lssDurations{jCond}{kTrial};
+                    
+                    % Make trial directory
+                    if settings.useTempFS
+                        trialDir = [tempDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
+                    else
+                        trialDir = [betaDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
                     end
-                end
-                if settings.overwrite || ~exist([betaDir '4D_' allConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
-                    for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
-                        % Set onsets and durations. setdiff will reorder alphabetically/numerically,
-                        % but that should not matter.
-                        onsets = {};
-                        durations = {};
-                        names = {};
+                    if ~exist(trialDir,'dir')
+                        mkdir(trialDir)
+                    end
 
-                        singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' sprintf('%03d', kTrial)];
-                        otherSameCondName = ['OTHER_' SPM.Sess(iSess).U(jCond).name{1}];
+                    % Save regressor onset files
+                    regFile = [trialDir 'st_regs.mat'];
+                    save(regFile, 'names', 'onsets', 'durations');
 
-                        singleOnset = SPM.Sess(iSess).U(jCond).ons(kTrial);
-                        singleDuration = SPM.Sess(iSess).U(jCond).dur(kTrial);
-                        [otherSameCondOnsets, index] = setdiff(SPM.Sess(iSess).U(jCond).ons, SPM.Sess(iSess).U(jCond).ons(kTrial));
-                        otherSameCondDurations = SPM.Sess(iSess).U(jCond).dur(index);
-                        
-                        % This is basically a special case for conditions
-                        % with only one trial in that Session. Hopefully
-                        % you would ignore such conditions (since they're
-                        % probably error conditions or NRs), but if you
-                        % didn't the script would otherwise break here.
-                        if ~isempty(otherSameCondOnsets)
-                            onsets = [onsets singleOnset otherSameCondOnsets otherDiffCondOnsets];
-                            durations = [durations singleDuration otherSameCondDurations otherDiffCondDurations];
-                            names = [names singleName otherSameCondName otherDiffCondNames];
-                        else
-                            onsets = [onsets singleOnset otherDiffCondOnsets];
-                            durations = [durations singleDuration otherDiffCondDurations];
-                            names = [names singleName otherDiffCondNames];
-                        end
+                    covFile = [trialDir 'st_covs.txt'];
+                    dlmwrite(covFile, covariates, '\t');
 
-                        % Make trial directory
-                        trialDir = [outDir 'Sess' sprintf('%03d', iSess) '/' singleName '/'];
-                        if ~exist(trialDir,'dir')
-                            mkdir(trialDir)
-                        end
+                    % Create matlabbatch for creating new SPM.mat file
+                    matlabbatch = create_spm_init(trialDir, SPM);
+                    matlabbatch = create_spm_sess(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
+                    
+                    % Run matlabbatch to create new SPM.mat file using SPM batch tools
+                    if counter == 1
+                        spm_jobman('initcfg')
+                        spm('defaults', 'FMRI');
+                    end
+                    if settings.overwrite || ~exist([trialDir 'beta_0001.img'], 'file')
+                        fprintf('\nCreating SPM.mat file:\n%s\n\n', [trialDir 'SPM.mat']);
+                        spm_jobman('serial', matlabbatch);
+                        clear matlabbatch
+                        runBatches = 1;
+                    else
+                        clear matlabbatch
+                        runBatches = 0;
+                    end
+                    counter = counter + 1;
 
-                        % Add trial information
-                        currInfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1} kTrial...
-                            length(SPM.Sess(iSess).U(jCond).ons(kTrial)) singleName trialDir...
-                            ['Sess' sprintf('%03d', iSess) '_' singleName '.img']};
-                        trialInfo = [trialInfo; currInfo];
+                    if runBatches
+                        fprintf('\nEstimating model from SPM.mat file.\n');
+                        spmFile = [trialDir 'SPM.mat'];
+                        matlabbatch = estimate_spm(spmFile);
+                        spm_jobman('serial', matlabbatch);
+                        clear matlabbatch
 
-                        % Save regressor onset files
-                        regFile = [trialDir 'st_regs.mat'];
-                        save(regFile, 'names', 'onsets', 'durations');
-
-                        covFile = [trialDir 'st_covs.txt'];
-                        dlmwrite(covFile, covariates, '\t');
-
-                        % Create matlabbatch for creating new SPM.mat file
-                        matlabbatch = create_spm_init(trialDir, SPM);
-                        matlabbatch = create_spm_sess(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
-
-                        % Run matlabbatch to create new SPM.mat file using SPM batch tools
-                        if counter == 1
-                            spm_jobman('initcfg')
-                            spm('defaults', 'FMRI');
-                        end
-                        if settings.overwrite || ~exist([trialDir 'beta_0001.img'], 'file')
-                            fprintf('\nCreating SPM.mat file:\n%s\n\n', [trialDir 'SPM.mat']);
-                            spm_jobman('serial', matlabbatch);
-                            clear matlabbatch
-                            runBatches = 1;
-                        else
-                            clear matlabbatch
-                            runBatches = 0;
-                        end
-                        counter = counter + 1;
-
-                        if runBatches
-                            fprintf('\nEstimating model from SPM.mat file.\n');
-                            spmFile = [trialDir 'SPM.mat'];
-                            matlabbatch = estimate_spm(spmFile);
-                            spm_jobman('serial', matlabbatch);
-                            clear matlabbatch
-
-                            % Copy first beta image to beta directory
-                            system(['cp ' trialDir 'beta_0001.img ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
-                            system(['cp ' trialDir 'beta_0001.hdr ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
-
-                            % Discard extra files, if desired
-                            if settings.deleteFiles
-                                prevDir = pwd;
-                                cd(trialDir);
-                                delete SPM*; delete *.hdr; delete *.img;
-                                cd(prevDir);
+                        % Copy first beta image to beta directory
+                        newSPM = load(spmFile);
+                        for mBeta = 1:length(newSPM.SPM.Vbeta)
+                            if strfind(newSPM.SPM.Vbeta(mBeta).descrip, singleName)
+                                betaFile = [trialDir newSPM.SPM.Vbeta(mBeta).fname];
+                                break
                             end
+                        end
+                                
+                        if strfind(betaFile, '.img')
+                            [~, betaFileName, ~] = fileparts(betaFile);
+                            system(['cp ' betaFile ' ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.img']);
+                            system(['cp ' trialDir betaFileName '.hdr ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.hdr']);
+                        elseif strfind(betaFile, '.nii')
+                            system(['cp ' betaFile ' ' betaDir 'Sess' sprintf('%03d', iSess) '_' singleName '.nii']);
+                        end
+
+                        % Discard extra files, if desired.
+                        if settings.useTempFS
+                            system(['rm -rf ' trialDir]);
                         end
                     end
                 end
@@ -204,43 +202,43 @@ if settings.model == 2
         end
         
         % Make 4D image for each condition of interest in block.
-        wantedConds = setdiff(allConds, ignoreConditions);
-        for jCond = 1:length(wantedConds)
-            condVols = dir([betaDir 'Sess' sprintf('%03d', iSess) '_' wantedConds{jCond} '*.img']);
+        for jCond = 1:length(includeConditions)
+            condVols = dir([betaDir 'Sess' sprintf('%03d', iSess) '_' includeConditions{jCond} '*.img']);
+            if isempty(condVols)
+                condVols = dir([betaDir 'Sess' sprintf('%03d', iSess) '_' includeConditions{jCond} '*.nii']);
+            end
 
             cellVols = struct2cell(condVols);
             cellVols = cellVols(1, :);
             for kVol = 1:length(cellVols)
                 cellVols{kVol} = [betaDir cellVols{kVol} ',1'];
             end
-            images{jCond}{iSess} = [betaDir '4D_' wantedConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
-            matlabbatch{1}.spm.util.cat.name = [betaDir '4D_' wantedConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
+            images{jCond}{iSess} = [betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
+            matlabbatch{1}.spm.util.cat.name = [betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
             matlabbatch{1}.spm.util.cat.vols = cellVols;
             matlabbatch{1}.spm.util.cat.dtype = 0;
             
-            if settings.overwrite || ~exist([betaDir '4D_' wantedConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
+            if settings.overwrite || ~exist([betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
                 save([betaDir '3Dto4D_jobfile.mat'], 'matlabbatch');
                 spm_jobman('run', matlabbatch);
             else
-                fprintf('Exists: %s\n', [betaDir '4D_' wantedConds{jCond} '_Sess' sprintf('%03d', iSess) '.nii']);
+                fprintf('Exists: %s\n', [betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii']);
             end
         end
     end
-
-    % Save beta information
-    infofile = [betaDir subject '_beta_info.mat'];
-    save(infofile, 'trialInfo');
+    
+    % Delete data folder, if desired.
+    if settings.useTempFS
+        system(['rm -rf ' tempDir]);
+    end
 
 % MULTI-REGRESSOR APPROACH
 elseif settings.model == 1
     spmFile = [outDir 'SPM.mat'];
-    
-    % Set up beta information
-    trialInfo = {'beta_number' 'session' 'condition' 'condition_rep' 'number_onsets' 'first_onset' 'beta_name'};
     counter = 1;
 
     % Loop across sessions
-    wantedConds = {};
+    includeConditions = {};
     for iSess = 1:length(SPM.Sess)
         rows = SPM.Sess(iSess).row;
         sessFiles = files(rows', :);
@@ -253,27 +251,20 @@ elseif settings.model == 1
 
         for jCond = 1:length(SPM.Sess(iSess).U)
             % Check for special condition names to lump together
-            if cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, ignoreConditions, '')
+            if ~cellstrfind(SPM.Sess(iSess).U(jCond).name{1}, includeConditions, '')
                 onsets = [onsets SPM.Sess(iSess).U(jCond).ons'];
                 durations = [durations SPM.Sess(iSess).U(jCond).dur'];
                 singleName = [SPM.Sess(iSess).U(jCond).name{1}];
                 names = [names singleName];
-                currInfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1}...
-                    1 length(SPM.Sess(iSess).U(jCond).ons) SPM.Sess(iSess).U(jCond).ons(1) singleName};
-                trialInfo = [trialInfo; currInfo];
                 counter = counter + 1;
             % Otherwise set up a regressor for each individual trial
             else
-                wantedConds{length(wantedConds) + 1} = SPM.Sess(iSess).U(jCond).name{1};
+                includeConditions{length(includeConditions) + 1} = SPM.Sess(iSess).U(jCond).name{1};
                 for kTrial = 1:length(SPM.Sess(iSess).U(jCond).ons)
                     onsets = [onsets SPM.Sess(iSess).U(jCond).ons(kTrial)];
                     durations = [durations SPM.Sess(iSess).U(jCond).dur(kTrial)];
                     singleName = [SPM.Sess(iSess).U(jCond).name{1} '_' num2str(kTrial)];
                     names = [names singleName];
-                    currInfo = {counter iSess SPM.Sess(iSess).U(jCond).name{1}...
-                        kTrial length(SPM.Sess(iSess).U(jCond).ons(kTrial))...
-                        SPM.Sess(iSess).U(jCond).ons(kTrial) singleName};
-                    trialInfo = [trialInfo; currInfo];
                     counter = counter + 1;
                 end
             end
@@ -289,23 +280,12 @@ elseif settings.model == 1
             % in the original model
             covFile = [outDir 'st_covs_session_' num2str(iSess) '.txt'];
             dlmwrite(covFile, covariates, '\t');
-            if ~isempty(covariates)
-                for icov = 1:size(covariates, 2)
-                    currInfo = {counter iSess 'covariate' icov 1 0 strcat('covariate',num2str(icov))};
-                    trialInfo = [trialInfo; currInfo];
-                    counter = counter + 1;
-                end
-            end
 
             % Create matlabbatch for creating new SPM.mat file
             if iSess == 1
                 matlabbatch = create_spm_init(outDir, SPM);
             end
             matlabbatch = create_spm_sess(matlabbatch, iSess, sessFiles, regFile, covFile, SPM);
-            
-            % Save beta information
-            infofile = [outDir 'beta_info_session_' num2str(iSess) '.mat'];
-            save(infofile, 'trialInfo');
         end
     end
     
@@ -326,28 +306,30 @@ elseif settings.model == 1
     
     clear matlabbatch
     load(spmFile);
-    wantedConds = unique(wantedConds);
-    for iCond = 1:length(wantedConds)
+    includeConditions = unique(includeConditions);
+    for iCond = 1:length(includeConditions)
         counter = 1;
         for jBeta = 1:length(SPM.Vbeta)
-            if strfind(SPM.Vbeta(jBeta).descrip, wantedConds{iCond})
+            if strfind(SPM.Vbeta(jBeta).descrip, includeConditions{iCond})
                 cellVols{counter} = [SPM.swd '/' SPM.Vbeta(jBeta).fname ',1'];
                 counter = counter + 1;
             end
         end
-        images{iCond}{1} = [betaDir '4D_' wantedConds{iCond} '.nii'];
-        matlabbatch{iCond}.spm.util.cat.name = [betaDir '4D_' wantedConds{iCond} '.nii'];
+        images{iCond}{1} = [betaDir '4D_' includeConditions{iCond} '.nii'];
+        matlabbatch{iCond}.spm.util.cat.name = [betaDir '4D_' includeConditions{iCond} '.nii'];
         matlabbatch{iCond}.spm.util.cat.vols = cellVols;
         matlabbatch{iCond}.spm.util.cat.dtype = 0;
         clear cellVols
     end
-    if settings.overwrite || ~exist([betaDir '4D_' wantedConds{end} '.nii'], 'file')
+    if settings.overwrite || ~exist([betaDir '4D_' includeConditions{end} '.nii'], 'file')
         save([betaDir '3Dto4D_jobfile.mat'], 'matlabbatch');
         spm_jobman('run', matlabbatch);
     else
-        fprintf('Exists: %s\n', [betaDir '4D_' wantedConds{end} '.nii']);
+        fprintf('Exists: %s\n', [betaDir '4D_' includeConditions{end} '.nii']);
     end
     clear SPM matlabbatch
+
+% If you didn't set settings.model properly.
 else
     error('Specify model type as 1 or 2');
 end
@@ -391,3 +373,78 @@ function [matlabbatch] = estimate_spm(spmFile)
     matlabbatch{1}.spm.stats.fmri_est.method.Classical = 1;
 end
 
+function [lssNames, lssOnsets, lssDurations] = lssMakeVectors(originalNames, originalOnsets, originalDurations, includeConditions)
+% FORMAT [lssNames, lssOnsets, lssDurations] = lssMakeVectors(originalNames, originalOnsets, originalDurations, includeConditions)
+% Uses SPM-format vectors (in variables corresponding to names, onsets, and
+% durations) to create cell arrays of names, onsets, and durations for each
+% LS-S model for conditions of interest.
+%
+%
+% input
+% originalNames:        Cell array of condition names for a single block.
+% originalOnsets:       Cell array of trial onset vectors for a single block.
+% originalDurations:    Cell array of trial duration vectors for a single block.
+% includeConditions:    A cell array of events we wish to model with the
+%                       beta LSS method.
+% 
+% output
+% lssNames:             Cell array of LS-S condition names for a single
+%                       block. Format lssNames{includedCondition}{conditionName}
+% lssOnsets:            Cell array of LS-S condition onsets for a single
+%                       block. Format lssOnsets{includedCondition}{trialVersion}(trial)
+% lssDurations:         Cell array of LS-S condition durations for a single
+%                       block. Format lssDurations{includedCondition}{trialVersion}(trial)
+for iCond = 1:length(includeConditions)
+    % Determine where conditions of interest are in vectors.
+    % Setdiff reorders conditions, otherConditions must be reordered.
+    otherConditionsIdx = ~strcmp(includeConditions{iCond}, originalNames);
+    [otherConditions, originalOrder] = setdiff(originalNames, includeConditions{iCond});
+    [~, sortedOrder] = sort(originalOrder);
+    otherConditions = otherConditions(sortedOrder);
+    includeConditionIdx = find(~otherConditionsIdx);
+    
+    % Check that condition of interest has more than one trial.
+    % If condition A only has one trial, you don't need both ConditionA_001
+    % and Other_ConditionA, because Other_ConditionA would be empty.
+    if ~isempty(setdiff(originalOnsets{includeConditionIdx}, originalOnsets{includeConditionIdx}(1)))
+        for jOnset = 1:length(originalOnsets{includeConditionIdx}),
+            % Create list of condition names
+            % (e.g. ConditionA_001, Other_ConditionA, ConditionB, ConditionC, etc.)
+            lssNames{iCond}{jOnset} = [{[originalNames{includeConditionIdx} '_' sprintf('%03d', jOnset)]...
+                                        ['Other_' originalNames{includeConditionIdx}]}...
+                                       otherConditions];
+            
+            % Single trial
+            lssOnsets{iCond}{jOnset}{1} = originalOnsets{includeConditionIdx}(jOnset);
+            lssDurations{iCond}{jOnset}{1} = originalDurations{includeConditionIdx}(jOnset);
+            
+            % Other trials of same condition
+            lssOnsets{iCond}{jOnset}{2} = originalOnsets{includeConditionIdx};
+            lssOnsets{iCond}{jOnset}{2}(jOnset) = [];
+            lssDurations{iCond}{jOnset}{2} = originalDurations{includeConditionIdx};
+            lssDurations{iCond}{jOnset}{2}(jOnset) = [];
+
+            % Other conditions
+            counter = 3; % A counter adjusts around the skipped condition.
+            for kCond = find(otherConditionsIdx)
+                lssOnsets{iCond}{jOnset}{counter} = originalOnsets{kCond};
+                lssDurations{iCond}{jOnset}{counter} = originalDurations{kCond};
+                counter = counter + 1;
+            end
+        end
+    else
+        % Single trial
+        lssNames{iCond}{1} = [{[originalNames{includeConditionIdx} '_' sprintf('%03d', 1)]} otherConditions];
+        lssOnsets{iCond}{1}{1} = originalOnsets{includeConditionIdx}(1);
+        lssDurations{iCond}{1}{1} = originalDurations{includeConditionIdx}(1);
+        
+        % Other conditions
+        conditionCounter = 2; % A counter adjusts around the skipped condition.
+        for kCond = find(otherConditionsIdx)
+            lssOnsets{iCond}{1}{conditionCounter} = originalOnsets{kCond};
+            lssDurations{iCond}{1}{conditionCounter} = originalDurations{kCond};
+            conditionCounter = conditionCounter + 1;
+        end
+    end
+end
+end
