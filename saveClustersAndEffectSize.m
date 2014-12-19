@@ -17,6 +17,9 @@ function saveClustersAndEffectSize(spmFile, pThr, corr, k)
 if exist(spmFile, 'file')
     [path, ~] = fileparts(spmFile);
     load(spmFile);
+    if isempty(path)
+        path = pwd;
+    end
 else
     error('spmFile does not exist. Quitting.');
 end
