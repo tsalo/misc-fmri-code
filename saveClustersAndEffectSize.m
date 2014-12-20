@@ -154,10 +154,13 @@ for iCon = 1:length(SPM.xCon)
         outStruct{1}.header{1} = 'Region of Activation'; outStruct{2}.header{1} = 'BA'; outStruct{3}.header{1} = 'L/R';
         outStruct{4}.header{1} = 'k (mm3)'; outStruct{5}.header{1} = 'T'; outStruct{6}.header{1} = 'D';
         outStruct{7}.header{1} = 'x'; outStruct{8}.header{1} = 'y'; outStruct{9}.header{1} = 'z';
+        outStruct{10}.header{1} = 'meanT'; outStruct{11}.header{1} = 'meanD';
         roaCol = 1; baCol = 2; lrCol = 3; kCol = 4; tCol = 5; dCol = 6; xCol = 7; yCol = 8; zCol = 9;
+        meanTCol = 10; meanDCol = 11;
         outStruct{1}.col{1} = ''; outStruct{2}.col{1} = ''; outStruct{3}.col{1} = '';
         outStruct{4}.col{1} = ''; outStruct{5}.col{1} = ''; outStruct{6}.col{1} = '';
         outStruct{7}.col{1} = ''; outStruct{8}.col{1} = ''; outStruct{9}.col{1} = '';
+        outStruct{10}.col{1} = ''; outStruct{11}.col{1} = '';
 
         % Create masks of all significant clusters and determine mean
         % Cohen's D of each cluster.
@@ -299,6 +302,8 @@ for iCon = 1:length(SPM.xCon)
                 outStruct{xCol}.col{clustIdx(clustNumber), 1} = peakCoord(1);
                 outStruct{yCol}.col{clustIdx(clustNumber), 1} = peakCoord(2);
                 outStruct{zCol}.col{clustIdx(clustNumber), 1} = peakCoord(3);
+                outStruct{meanTCol}.col{clustIdx(clustNumber), 1} = mean(dValues(find(oneClustVals == 1)));
+                outStruct{meanDCol}.col{clustIdx(clustNumber), 1} = mean(contrastTValues(find(oneClustVals == 1)));
                 
                 if clustNumber == length(clustIdx)
                     [nRows, ~] = size(table);
