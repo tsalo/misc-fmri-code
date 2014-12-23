@@ -125,8 +125,11 @@ for iCon = 1:length(SPM.xCon)
         fprintf(['\tEvaluating contrast ' num2str(iCon) ', ' conName '\n']);
         
         if length(pThr) == 1
+            clusterExtentThresholdingDetected = 0;
             outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_k' num2str(k) '_clusters/' conName '/'];
         else
+            clusterExtentThresholdingDetected = 1;
+            fprintf('Cluster extent thresholding detected: Only cluster-level statistics will be reported.\n');
             outDir = [path '/v' num2str(pThr{1}) '_' corr{1} '_k' num2str(k) '_c' num2str(pThr{2}) '_' corr{2} '_clusters/' conName '/'];
         end
         
@@ -151,16 +154,22 @@ for iCon = 1:length(SPM.xCon)
         
         % Set up output csv.
         clear outStruct
-        outStruct{1}.header{1} = 'Region of Activation'; outStruct{2}.header{1} = 'BA'; outStruct{3}.header{1} = 'L/R';
-        outStruct{4}.header{1} = 'k (mm3)'; outStruct{5}.header{1} = 'T'; outStruct{6}.header{1} = 'D';
+        outStruct{1}.header{1} = 'Region of Activation'; outStruct{2}.header{1} = 'BA';
+        outStruct{3}.header{1} = 'L/R'; outStruct{4}.header{1} = 'k (mm3)';
         outStruct{7}.header{1} = 'x'; outStruct{8}.header{1} = 'y'; outStruct{9}.header{1} = 'z';
-        outStruct{10}.header{1} = 'meanT'; outStruct{11}.header{1} = 'meanD';
+        
+        if clusterExtentThresholdingDetected
+            outStruct{5}.header{1} = 'Mean T';
+            outStruct{6}.header{1} = 'Mean D';
+        else
+            outStruct{5}.header{1} = 'T';
+            outStruct{6}.header{1} = 'D';
+        end
+        
         roaCol = 1; baCol = 2; lrCol = 3; kCol = 4; tCol = 5; dCol = 6; xCol = 7; yCol = 8; zCol = 9;
-        meanTCol = 10; meanDCol = 11;
         outStruct{1}.col{1} = ''; outStruct{2}.col{1} = ''; outStruct{3}.col{1} = '';
         outStruct{4}.col{1} = ''; outStruct{5}.col{1} = ''; outStruct{6}.col{1} = '';
         outStruct{7}.col{1} = ''; outStruct{8}.col{1} = ''; outStruct{9}.col{1} = '';
-        outStruct{10}.col{1} = ''; outStruct{11}.col{1} = '';
 
         % Create masks of all significant clusters and determine mean
         % Cohen's D of each cluster.
@@ -205,7 +214,7 @@ for iCon = 1:length(SPM.xCon)
         
         table = spm_list_edited(xSPM, 5, 8);
 
-        if length(corr) == 2
+        if clusterExtentThresholdingDetected
             switch corr{2}
                 case 'unc'
                     col = 4;
@@ -223,7 +232,7 @@ for iCon = 1:length(SPM.xCon)
         % Pare down table to cluster-level significant clusters if
         % cluster-extent based thresholding is being applied. Else, keep as
         % is.
-        if length(pThr) == 2
+        if clusterExtentThresholdingDetected
             for iClust = length(clustIdx):-1:1
                 if iClust == length(clustIdx)
                     if table{clustIdx(iClust), col} > pThr{2}
@@ -281,7 +290,9 @@ for iCon = 1:length(SPM.xCon)
                     allClustMask = allClustMask + oneClustVals;
                 end
                 peakCoord = table{clustIdx(clustNumber), 10}.';
-                clusterFileHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber) '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2)) '_' num2str(peakCoord(3)) '.nii'];
+                clusterFileHeader.fname = [outDir 'Cluster_' sprintf('%03d', clustNumber)...
+                                           '_' num2str(peakCoord(1)) '_' num2str(peakCoord(2))...
+                                           '_' num2str(peakCoord(3)) '.nii'];
                 spm_write_vol(clusterFileHeader, oneClustVals);
                 
                 % Fill in output csv.
@@ -297,13 +308,18 @@ for iCon = 1:length(SPM.xCon)
                 end
                 
                 outStruct{kCol}.col{clustIdx(clustNumber), 1} = clustSize(jClust) * voxelScalar;
-                outStruct{tCol}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
-                outStruct{dCol}.col{clustIdx(clustNumber), 1} = dValues(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
+                
                 outStruct{xCol}.col{clustIdx(clustNumber), 1} = peakCoord(1);
                 outStruct{yCol}.col{clustIdx(clustNumber), 1} = peakCoord(2);
                 outStruct{zCol}.col{clustIdx(clustNumber), 1} = peakCoord(3);
-                outStruct{meanTCol}.col{clustIdx(clustNumber), 1} = mean(dValues(find(oneClustVals == 1)));
-                outStruct{meanDCol}.col{clustIdx(clustNumber), 1} = mean(contrastTValues(find(oneClustVals == 1)));
+                
+                if clusterExtentThresholdingDetected
+                    outStruct{tCol}.col{clustIdx(clustNumber), 1} = mean(dValues(find(oneClustVals == 1)));
+                    outStruct{dCol}.col{clustIdx(clustNumber), 1} = mean(contrastTValues(find(oneClustVals == 1)));
+                else
+                    outStruct{tCol}.col{clustIdx(clustNumber), 1} = num2str(table{clustIdx(clustNumber), 7});
+                    outStruct{dCol}.col{clustIdx(clustNumber), 1} = dValues(clustPeakMM(1), clustPeakMM(2), clustPeakMM(3));
+                end
                 
                 if clustNumber == length(clustIdx)
                     [nRows, ~] = size(table);
@@ -324,9 +340,16 @@ for iCon = 1:length(SPM.xCon)
                     end
                     
                     outStruct{kCol}.col{mSubClust, 1} = '';
-                    outStruct{tCol}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
                     subPeakMM = (table{mSubClust, 10}.' - VspmT.mat(1:3, 4)') / VspmT.mat(1:3, 1:3);
-                    outStruct{dCol}.col{mSubClust, 1} = dValues(subPeakMM(1), subPeakMM(2), subPeakMM(3));
+                    
+                    if clusterExtentThresholdingDetected
+                        outStruct{tCol}.col{mSubClust, 1} = '';
+                        outStruct{dCol}.col{mSubClust, 1} = '';
+                    else
+                        outStruct{tCol}.col{mSubClust, 1} = num2str(table{mSubClust, 7});
+                        outStruct{dCol}.col{mSubClust, 1} = dValues(subPeakMM(1), subPeakMM(2), subPeakMM(3));
+                    end
+                    
                     outStruct{xCol}.col{mSubClust, 1} = table{mSubClust, 10}(1);
                     outStruct{yCol}.col{mSubClust, 1} = table{mSubClust, 10}(2);
                     outStruct{zCol}.col{mSubClust, 1} = table{mSubClust, 10}(3);
