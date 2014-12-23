@@ -149,8 +149,8 @@ if settings.model == 2
                     dlmwrite(covFile, covariates, '\t');
 
                     % Create matlabbatch for creating new SPM.mat file
-                    matlabbatch = create_spm_init(trialDir, SPM);
-                    matlabbatch = create_spm_sess(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
+                    matlabbatch = createSpmBatch(trialDir, SPM);
+                    matlabbatch = addSessionToBatch(matlabbatch, 1, sessFiles, regFile, covFile, SPM);
                     
                     % Run matlabbatch to create new SPM.mat file using SPM batch tools
                     if counter == 1
@@ -171,7 +171,7 @@ if settings.model == 2
                     if runBatches
                         fprintf('\nEstimating model from SPM.mat file.\n');
                         spmFile = [trialDir 'SPM.mat'];
-                        matlabbatch = estimate_spm(spmFile);
+                        matlabbatch = estimateSpmFile(spmFile);
                         spm_jobman('serial', matlabbatch);
                         clear matlabbatch
 
@@ -238,7 +238,6 @@ elseif settings.model == 1
     counter = 1;
 
     % Loop across sessions
-    includeConditions = {};
     for iSess = 1:length(SPM.Sess)
         rows = SPM.Sess(iSess).row;
         sessFiles = files(rows', :);
@@ -283,9 +282,9 @@ elseif settings.model == 1
 
             % Create matlabbatch for creating new SPM.mat file
             if iSess == 1
-                matlabbatch = create_spm_init(outDir, SPM);
+                matlabbatch = createSpmBatch(outDir, SPM);
             end
-            matlabbatch = create_spm_sess(matlabbatch, iSess, sessFiles, regFile, covFile, SPM);
+            matlabbatch = addSessionToBatch(matlabbatch, iSess, sessFiles, regFile, covFile, SPM);
         end
     end
     
@@ -298,7 +297,7 @@ elseif settings.model == 1
         clear matlabbatch
 
         fprintf('\nEstimating model from SPM.mat file.\n');
-        matlabbatch = estimate_spm(spmFile);
+        matlabbatch = estimateSpmFile(spmFile);
         spm_jobman('serial', matlabbatch);
     else
         fprintf('Exists: %s\n', [outDir 'SPM.mat']);
@@ -338,39 +337,53 @@ clear SPM
 end
 
 %% SUBFUNCTIONS
-function [matlabbatch] = create_spm_init(outDir, SPM)
+function matlabbatch = createSpmBatch(outDir, SPM)
+% FORMAT matlabbatch = createSpmBatch(outDir, SPM)
 % Subfunction for initializing the matlabbatch structure to create the SPM
-    matlabbatch{1}.spm.stats.fmri_spec.dir = {outDir};
-    matlabbatch{1}.spm.stats.fmri_spec.timing.units = SPM.xBF.UNITS;
-    matlabbatch{1}.spm.stats.fmri_spec.timing.RT = SPM.xY.RT;
-    matlabbatch{1}.spm.stats.fmri_spec.timing.fmri_t = SPM.xBF.T;
-    matlabbatch{1}.spm.stats.fmri_spec.timing.fmri_t0 = SPM.xBF.T0;
-    matlabbatch{1}.spm.stats.fmri_spec.fact = struct('name', {}, 'levels', {});
-    matlabbatch{1}.spm.stats.fmri_spec.bases.hrf.derivs = [0 0];
-    matlabbatch{1}.spm.stats.fmri_spec.volt = SPM.xBF.Volterra;
-    matlabbatch{1}.spm.stats.fmri_spec.global = 'None';
-    if isempty(SPM.xM.VM)
-        matlabbatch{1}.spm.stats.fmri_spec.mask = {''};
-    else
-        matlabbatch{1}.spm.stats.fmri_spec.mask = {SPM.xM.VM.fname};
-    end
-    matlabbatch{1}.spm.stats.fmri_spec.cvi = SPM.xVi.form;
+% file.
+%
+%
+% 140311 Created by Maureen Ritchey
+matlabbatch{1}.spm.stats.fmri_spec.dir = {outDir};
+matlabbatch{1}.spm.stats.fmri_spec.timing.units = SPM.xBF.UNITS;
+matlabbatch{1}.spm.stats.fmri_spec.timing.RT = SPM.xY.RT;
+matlabbatch{1}.spm.stats.fmri_spec.timing.fmri_t = SPM.xBF.T;
+matlabbatch{1}.spm.stats.fmri_spec.timing.fmri_t0 = SPM.xBF.T0;
+matlabbatch{1}.spm.stats.fmri_spec.fact = struct('name', {}, 'levels', {});
+matlabbatch{1}.spm.stats.fmri_spec.bases.hrf.derivs = [0 0];
+matlabbatch{1}.spm.stats.fmri_spec.volt = SPM.xBF.Volterra;
+matlabbatch{1}.spm.stats.fmri_spec.global = 'None';
+if isempty(SPM.xM.VM)
+    matlabbatch{1}.spm.stats.fmri_spec.mask = {''};
+else
+    matlabbatch{1}.spm.stats.fmri_spec.mask = {SPM.xM.VM.fname};
+end
+matlabbatch{1}.spm.stats.fmri_spec.cvi = SPM.xVi.form;
 end
 
-function [matlabbatch] = create_spm_sess(matlabbatch, iSess, sessFiles, regFile, covFile, SPM)
-% Subfunction for adding sessions to the matlabbatch structure
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).scans = sessFiles; %fix this
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).cond = struct('name', {}, 'onset', {}, 'duration', {}, 'tmod', {}, 'pmod', {});
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).multi = {regFile};
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).regress = struct('name', {}, 'val', {});
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).multi_reg = {covFile};
-    matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).hpf = SPM.xX.K(iSess).HParam;
+function matlabbatch = addSessionToBatch(matlabbatch, iSess, sessFiles, regFile, covFile, SPM)
+% FORMAT matlabbatch = addSessionToBatch(matlabbatch, iSess, sessFiles, regFile, covFile, SPM)
+% Subfunction for adding sessions to the matlabbatch structure.
+%
+%
+% 140311 Created by Maureen Ritchey
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).scans = sessFiles; %fix this
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).cond = struct('name', {}, 'onset', {}, 'duration', {}, 'tmod', {}, 'pmod', {});
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).multi = {regFile};
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).regress = struct('name', {}, 'val', {});
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).multi_reg = {covFile};
+matlabbatch{1}.spm.stats.fmri_spec.sess(iSess).hpf = SPM.xX.K(iSess).HParam;
 end
 
-function [matlabbatch] = estimate_spm(spmFile)
+function matlabbatch = estimateSpmFile(spmFile)
+% FORMAT matlabbatch = estimateSpmFile(spmFile)
 % Subfunction for creating a matlabbatch structure to estimate the SPM
-    matlabbatch{1}.spm.stats.fmri_est.spmmat = {spmFile};
-    matlabbatch{1}.spm.stats.fmri_est.method.Classical = 1;
+% file.
+%
+%
+% 140311 Created by Maureen Ritchey
+matlabbatch{1}.spm.stats.fmri_est.spmmat = {spmFile};
+matlabbatch{1}.spm.stats.fmri_est.method.Classical = 1;
 end
 
 function [lssNames, lssOnsets, lssDurations] = lssMakeVectors(originalNames, originalOnsets, originalDurations, includeConditions)
