@@ -8,6 +8,9 @@ function quickViewGif(inputFile, saveFile, coordinates, view)
 % coordinates:  Coordinates. 1x3 double.
 % view:         View. String. Options: 'sag' (sagittal), 'ax' (axial),
 %               'cor' (coronal).
+%
+%
+% 141222 Created by Taylor Salo
 
 p = 0.001;  % P value.
 k = 100;   % Minimum cluster size.
