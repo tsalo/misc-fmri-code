@@ -174,7 +174,7 @@ switch settings.fConnType
                 % If there are multiple runs (i.e. LSS), create a mean file.
                 if length(zImages{iCond}) > 1
                     allCorr = [];
-                    meanStruct.badrois = {};
+                    meanStruct.badRois = {};
                     for jSess = 1:length(images{iCond})
                         load(zImages{iCond}{jSess});
                         allCorr(:, :, jSess) = corrStruct.corrMatrix;
@@ -184,10 +184,10 @@ switch settings.fConnType
                         % for that condition. It could be changed to ALL or
                         % majority or something, but I don't know what's
                         % best. -TS
-                        meanStruct.badrois = unique([meanStruct.badrois corrStruct.badrois]);
+                        meanStruct.badRois = unique([meanStruct.badRois corrStruct.badRois]);
                         clear corrStruct
                     end
-                    meanStruct.meanCorr = mean(allCorr, 3);
+                    meanStruct.meanCorr = nanmean(allCorr, 3);
                     save(outName, 'meanStruct');
                 end
             else
@@ -278,7 +278,7 @@ if ~exist('trimStd', 'var'), trimStd = 3; end
 allBetasAcrossVolumes = spm_get_data(niiHeader, xVol.XYZ);
 correlationMatrix = cell(3); correlationMatrix{1} = zeros(1, size(allBetasAcrossVolumes, 2));
 for iVoxel = 1:size(allBetasAcrossVolumes, 2),
-    if trimStd > 0,
+    if trimStd > 0
         allBetasAcrossVolumes(:, iVoxel) = trimTimeseries(allBetasAcrossVolumes(:, iVoxel), trimStd);
     end
     correlationMatrix{1}(iVoxel) = corr(meanRoi, allBetasAcrossVolumes(:, iVoxel), 'type', 'Pearson');
@@ -303,7 +303,7 @@ nVoxels = size(xVol.XYZ, 2); % length of real data in brain - should match the l
 corrData = NaN * ones(xVol.DIM(1), xVol.DIM(2), xVol.DIM(3)); % array of NaN size of brain volumne
 
 % replace NaN's with corr results
-for iVoxel = 1:nVoxels,
+for iVoxel = 1:nVoxels
     corrData(xVol.XYZ(1, iVoxel), xVol.XYZ(2, iVoxel), xVol.XYZ(3, iVoxel)) = correlationMatrix(iVoxel);
 end
 
@@ -340,7 +340,7 @@ function [y, nTrimmed] = trimTimeseries(y, sd)
 
 nTrimmed = 0;
 idx = find(abs(y) > sd*std(y));
-if ~isempty(idx),
+if ~isempty(idx)
     y(idx) = sign(y(idx)) * sd*std(y);
     nTrimmed = length(idx);
 end
@@ -367,7 +367,7 @@ index = [];
 for n = 1:size(Y, 3)
     % find values greater > thresh
     [xx, yy] = find(squeeze(Y(:, :, n)) > thresh);
-    if ~isempty(xx),
+    if ~isempty(xx)
         zz = ones(size(xx)) * n;
         index = [index [xx'; yy'; zz']];
     end
@@ -386,15 +386,15 @@ function funcXyz = adjustXyz(xyz, roiMatrix, niiHeader)
 % roiMatrix:        Output from roiFindIndex.
 % niiHeader:        Header information of nifti file from spm_vol.
 
-xyz(4,:) = 1;
+xyz(4, :) = 1;
 funcXyz = cell(length(niiHeader));
-for n = 1:length(niiHeader),
-    if(iscell(niiHeader)),
+for n = 1:length(niiHeader)
+    if(iscell(niiHeader))
        tmp = inv(niiHeader{n}.mat) * (roiMatrix * xyz);
     else
         tmp = inv(niiHeader(n).mat) * (roiMatrix * xyz);
     end
-    funcXyz{n} = tmp(1:3,:);
+    funcXyz{n} = tmp(1:3, :);
 end
 end
 
