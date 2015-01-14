@@ -12,6 +12,9 @@ function saveClustersAndEffectSize(spmFile, pThr, corr, k)
 % corr:             Correction applied to p threshold (FWE, FDR, or unc).
 %                   Cell array (same size as pThr) of strings.
 % k:                Minimum acceptable cluster size. Double.
+%
+%
+% 141019-150114 Created by Taylor Salo
 
 %% Check inputs
 if exist(spmFile, 'file')
