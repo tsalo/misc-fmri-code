@@ -16,7 +16,7 @@ settings.useTempFS = 1;        % 0- do not use temporary files, 1- use temporary
 settings.overwrite = 0;        % 0- do not overwrite, 1- overwrite
 
 % Connectivity settings
-rois = load('/nfs/cntracs/lssForKim/gt_rois2.mat');
+rois = load('/nfs/cntracs/lssForKim/gt_rois_final.mat');
 settings.fConnType = 'roi2roi'; % seed2voxel or roi2roi
 
 for iSubj = 1:length(subjects)
@@ -24,6 +24,6 @@ for iSubj = 1:length(subjects)
     outDir = [outFolder subjects{iSubj} outSubFolder];
     
     images = lssGenerateBetasSpm(subjects{iSubj}, spmDir, outDir, includeConditions, settings);
-%     lssCorrelation(images, rois.rois, settings);
+    lssCorrelation(images, rois.rois, settings);
 end
 hourToc(tStart);
