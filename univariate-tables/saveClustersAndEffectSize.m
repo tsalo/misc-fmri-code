@@ -55,8 +55,6 @@ rpvFile = [path '/RPV' fileSuffix];
 
 for iCon = 1:length(SPM.xCon)
     xSPM.STAT = SPM.xCon(iCon).STAT;
-    
-    xSPM.STAT = SPM.xCon(iCon).STAT;
     xSPM.df = [SPM.xCon(iCon).eidf SPM.xX.erdf];
     xSPM.k = k;
     xSPM.VRpv = spm_vol(rpvFile);
