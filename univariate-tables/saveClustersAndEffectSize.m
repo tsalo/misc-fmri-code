@@ -19,7 +19,8 @@ function saveClustersAndEffectSize(spmFile, pThr, correction, k, maskFile)
 %% Check inputs
 if exist(spmFile, 'file')
     [path, ~] = fileparts(spmFile);
-    load(spmFile);
+    LoadedVariables = load(spmFile);
+    SPM = LoadedVariables.SPM;
     if isempty(path)
         path = pwd;
     end
@@ -32,7 +33,11 @@ end
 %% Do everything else.
 origDir = pwd;
 cd(path);
-fprintf('Evaluating second-level results of design: %s.\n', SPM.xsDes.Design);
+try
+    fprintf('Evaluating second-level results of design: %s.\n', SPM.xsDes.Design);
+catch err
+    fprintf('Design could not be determined.\n');
+end
 if length(pThr) == 1
     fprintf(['Evaluating at p < ' num2str(pThr{1}) ' ' correction{1} ' and k > ' num2str(k) '.\n']);
     clusterExtentThresholdingDetected = false;
@@ -51,7 +56,7 @@ else
 end
 resmsFile = SPM.VResMS.fname;
 [~, ~, fileSuffix] = fileparts(resmsFile);
-rpvFile = [path '/RPV' fileSuffix];
+rpvFile = fullfile(path, ['RPV' fileSuffix]);
 
 for iCon = 1:length(SPM.xCon)
     xSPM.STAT = SPM.xCon(iCon).STAT;
