@@ -52,30 +52,28 @@ switch settings.fConnType
                     [~, roiName] = fileparts(rois{kROI});
                     
                     % Create file names for condition outputs.
-                    corrFilename{1} = [outDir '/Rcorr_' roiName fileName '.nii'];
-                    corrFilename{2} = [outDir '/R_atanh_corr_' roiName fileName '.nii']; % Also known as z'
-                    corrFilename{3} = [outDir '/Zcorr_' roiName fileName '.nii']; % Also known as z
-                    zImages{iCond}{kROI}{jSess} = corrFilename{3};
+                    corrFilename{1} = [outDir '/Rcorr_' roiName '_' fileName '.nii'];
+                    corrFilename{2} = [outDir '/R_atanh_corr_' roiName '_' fileName '.nii']; % Also known as z'
+                    corrFilename{3} = [outDir '/Zcorr_' roiName '_' fileName '.nii']; % Also known as z
+                    zImages{iCond}{kROI}{jSess} = corrFilename{2};
                     
-                    if settings.overwrite || ~exist(corrFilename{3}, 'file')
+                    if settings.overwrite || ~exist(corrFilename{2}, 'file')
                         % Correlate rest of brain with extracted timeseries from mask (R, R_atahn, Z).
                         meanRoi = extractBetaSeries(images{iCond}{jSess}, rois{kROI}, minVoxels)';
-                        
                         niiHeader = spm_vol(images{iCond}{jSess});
                         [Y, ~] = spm_read_vols(niiHeader(1));
                         nanIdx = find(~isnan(Y));
                         [x, y, z] = ind2sub(size(Y), nanIdx);
                         xVol.XYZ = [x y z].';
                         xVol.DIM = size(Y);
-                        xVol.M = niiHeader.mat;
-                        
+                        xVol.M = niiHeader(1).mat;
                         correlation = correlateBetaSeries(niiHeader, xVol, meanRoi);
 
                         % Write correlation (data) to corrFilename (name of output file).
                         writeCorrelationImage(correlation{1}, corrFilename{1}, xVol);
-                        writeCorrelationImage(correlation{3}, corrFilename{3}, xVol);
+                        writeCorrelationImage(correlation{2}, corrFilename{2}, xVol);
                     else
-                        fprintf('Exists: %s\n', corrFilename{3});
+                        fprintf('Exists: %s\n', corrFilename{2});
                     end
                 end
             end
@@ -150,8 +148,9 @@ switch settings.fConnType
                                 % corrcoef(x, y, 'rows', 'complete') works around NaNs and
                                 % only returns NaN if all (xi, yi) pairs contain a NaN.
     %                             rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
-                                steZ = 1 / sqrt(nTrials - 3);
-                                zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
+%                                 steZ = 1 / sqrt(nTrials - 3);
+%                                 zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
+                                zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI));
                             end
                         else
                             badRois = unique([badRois roiNames{kROI}]);
@@ -276,7 +275,7 @@ function correlationMatrix = correlateBetaSeries(niiHeader, xVol, meanRoi, trimS
 if ~exist('trimStd', 'var'), trimStd = 3; end
 
 allBetasAcrossVolumes = spm_get_data(niiHeader, xVol.XYZ);
-correlationMatrix = cell(3); correlationMatrix{1} = zeros(1, size(allBetasAcrossVolumes, 2));
+correlationMatrix = cell(1, 3); correlationMatrix{1} = zeros(1, size(allBetasAcrossVolumes, 2));
 for iVoxel = 1:size(allBetasAcrossVolumes, 2),
     if trimStd > 0
         allBetasAcrossVolumes(:, iVoxel) = trimTimeseries(allBetasAcrossVolumes(:, iVoxel), trimStd);
@@ -311,7 +310,7 @@ end
 
 % make nifti data structure see spm_vol - dt is [32 bit float, little endian]
 corrIm = struct ('fname', [outName, outExtension], ...
-    'dim',        xVol.DIM', ...
+    'dim',        xVol.DIM, ...
     'dt',         [16, 0], ...
     'mat',        xVol.M, ...
     'pinfo',      [1 0 0]', ...
