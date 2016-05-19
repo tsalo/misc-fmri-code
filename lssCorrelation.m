@@ -147,9 +147,6 @@ switch settings.fConnType
                                 % corr(x, y, 'type', 'Pearson') will return NaN if any values of x or y is NaN.
                                 % corrcoef(x, y, 'rows', 'complete') works around NaNs and
                                 % only returns NaN if all (xi, yi) pairs contain a NaN.
-    %                             rCorrMatrix(kROI, mROI) = corr(roiBetaSeries{kROI}, roiBetaSeries{mROI}, 'type', 'Pearson');
-%                                 steZ = 1 / sqrt(nTrials - 3);
-%                                 zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI)) / steZ;
                                 zCorrMatrix(kROI, mROI) = atanh(rCorrMatrix(kROI, mROI));
                             end
                         else
@@ -217,7 +214,9 @@ function meanRoi = extractBetaSeries(niiLoc, roiLoc, minVoxels, trimStd)
 %                   the raw data to be Windsorized. Set to 0 if the raw 
 %                   data are to be used. LSS default is 3. Double.
 
-if ~exist('trimStd', 'var'), trimStd = 3; end
+if ~exist('trimStd', 'var')
+    trimStd = 3;
+end
 threshold = 0; % Find mask values greater than this
 
 % Get header info for beta data.
@@ -338,9 +337,9 @@ function [y, nTrimmed] = trimTimeseries(y, sd)
 % nTrimmed:         Number of values replaced.
 
 nTrimmed = 0;
-idx = find(abs(y) > sd*std(y));
+idx = find(abs(y - mean(y)) > sd * std(y));
 if ~isempty(idx)
-    y(idx) = sign(y(idx)) * sd*std(y);
+    y(idx) = mean(y) + (sign(y(idx)) * sd * std(y));
     nTrimmed = length(idx);
 end
 end
