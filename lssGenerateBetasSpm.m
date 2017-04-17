@@ -210,7 +210,7 @@ if settings.model == 2
             end
             images{jCond}{iSess} = [betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
             matlabbatch{1}.spm.util.cat.name = [betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'];
-            matlabbatch{1}.spm.util.cat.vols = cellVols;
+            matlabbatch{1}.spm.util.cat.vols = cellVols';
             matlabbatch{1}.spm.util.cat.dtype = 0;
             
             if settings.overwrite || ~exist([betaDir '4D_' includeConditions{jCond} '_Sess' sprintf('%03d', iSess) '.nii'], 'file')
@@ -312,7 +312,7 @@ elseif settings.model == 1
         end
         images{iCond}{1} = [betaDir '4D_' includeConditions{iCond} '.nii'];
         matlabbatch{iCond}.spm.util.cat.name = [betaDir '4D_' includeConditions{iCond} '.nii'];
-        matlabbatch{iCond}.spm.util.cat.vols = cellVols;
+        matlabbatch{iCond}.spm.util.cat.vols = cellVols';
         matlabbatch{iCond}.spm.util.cat.dtype = 0;
         clear cellVols
     end
